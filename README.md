@@ -77,6 +77,21 @@ The system then:
 - Comprehensive error handling with custom exception hierarchy
 - Docker multi-stage build for containerized deployment
 
+**Enterprise AI Governance (APM · Tuning · Security · Multi-Agent)**
+- Zero-invasive APM sensor intercepting executed SQL for slow-query monitoring
+- AI SQL tuner producing rewrites + index DDL from real EXPLAIN plans
+- Privacy/compliance auditor (PII leakage, GDPR/HIPAA/PIPEDA)
+- Transactional sandbox harness (auto-rollback) for measuring real speedup
+- **Multi-agent SQL Governance Board** — a Supervisor coordinating Performance /
+  Security / Anti-Pattern / Sandbox specialist agents into one consolidated verdict
+  (`POST /api/text2sql_lg_code/enterprise/agents/review`, UI: 「多智能体 SQL 治理委员会」)
+- **Real MCP server** (built on [`fastmcp`](https://github.com/jlowin/fastmcp)) exposing
+  these capabilities as standard Model Context Protocol tools for Claude Desktop / Cursor / Cline
+- **Agent Skills** (Anthropic SKILL.md spec) under [`skills/`](skills/) wrapping the
+  tuning / privacy / anti-pattern / governance flows as portable, discoverable skills
+
+See [AI Governance & Agent Ecosystem](#ai-governance--agent-ecosystem) for usage.
+
 ---
 
 ## Architecture
@@ -527,6 +542,78 @@ POST /api/text2sql_lg_code/text2sql
 
 - **Swagger UI:** http://localhost:8090/api/docs
 - **OpenAPI JSON:** http://localhost:8090/api/openapi.json
+
+---
+
+## AI Governance & Agent Ecosystem
+
+Beyond Text2SQL, this platform ships an enterprise governance layer and an agent
+ecosystem so the SQL tuning/security capabilities are reusable by external AI agents.
+
+### 1. Multi-Agent SQL Governance Board
+
+A lightweight **Supervisor → specialists** orchestrator
+(`src/app/services/enterprise_tuning_service/governance_board.py`). Independent
+specialists run concurrently; the Supervisor aggregates them into one verdict.
+
+| Agent | Backed by | Contributes |
+|-------|-----------|-------------|
+| 性能调优专家 | `SQLTuner` | rewrite + index DDL + estimated speedup |
+| 数据安全与合规专家 | `PrivacyAuditor` | PII exposure, GDPR/HIPAA/PIPEDA risk score |
+| 反模式审查专家 | static rules | `SELECT *`, missing `LIMIT`, leading-wildcard `LIKE`, locks, cartesian joins |
+| 沙盒实测专家 (optional) | `SQLTuningHarness` | measured latency reduction in a rolled-back transaction |
+
+```bash
+curl -X POST http://localhost:8090/api/text2sql_lg_code/enterprise/agents/review \
+  -H "Content-Type: application/json" \
+  -d '{"sql_query": "SELECT * FROM causal_inference.sales WHERE customer_email LIKE '\''%@gmail.com'\''", "run_sandbox": false}'
+```
+
+Response: `overall_verdict` (`APPROVED` / `APPROVED_WITH_CHANGES` / `BLOCKED`),
+`overall_risk_score` (0-100), `consensus_summary`, `recommended_sql`,
+`action_items[]`, and each `specialist_verdicts[]`. In the UI, open
+**「多智能体 SQL 治理委员会」** from the sidebar.
+
+### 2. Model Context Protocol (MCP) Server
+
+`src/app/services/enterprise_tuning_service/mcp_app.py` exposes the platform's tools
+as a **standard MCP server** via [`fastmcp`](https://github.com/jlowin/fastmcp):
+`list_apm_traces`, `optimize_sql`, `audit_sql_privacy`, `audit_anti_patterns`,
+`benchmark_sql`, `governance_review`.
+
+```bash
+# stdio transport (Claude Desktop / Cursor)
+python -m src.app.services.enterprise_tuning_service.mcp_app
+# or streamable HTTP
+python -m src.app.services.enterprise_tuning_service.mcp_app --http --port 9000
+```
+
+Claude Desktop config example:
+
+```json
+{
+  "mcpServers": {
+    "sql-governance": {
+      "command": "python",
+      "args": ["-m", "src.app.services.enterprise_tuning_service.mcp_app"],
+      "cwd": "/path/to/SQL"
+    }
+  }
+}
+```
+
+### 3. Agent Skills (Anthropic SKILL.md)
+
+Portable skills under [`skills/`](skills/) following the Anthropic Agent Skills spec.
+Each skill is a self-contained folder (`SKILL.md` + bundled script) that calls the
+running backend (`SQL_API_BASE`, default `http://localhost:8090`):
+
+```bash
+python skills/sql-governance-review/scripts/review.py "<sql>"   # multi-agent verdict
+python skills/sql-tuning/scripts/tune.py "<sql>"                # tuning + indexes
+python skills/sql-privacy-audit/scripts/audit.py "<sql>"        # PII / compliance
+python skills/sql-anti-pattern-audit/scripts/audit.py "<sql>"   # static + AI lint
+```
 
 ---
 

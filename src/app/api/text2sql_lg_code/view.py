@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field
 from src.utils.logging import get_logger
 from src.core.lifetime import get_text2sql_service, get_database_client
 from src.app.services.text2sql_lg_service.exceptions import Text2SQLException, DatabaseConnectionException
-from src.app.services.enterprise_tuning_service import APMTracer, SQLTuner, PrivacyAuditor, SQLTuningHarness
+from src.app.services.enterprise_tuning_service import (
+    APMTracer, SQLTuner, PrivacyAuditor, SQLTuningHarness, SQLGovernanceBoard,
+)
 
 logger = get_logger(__name__)
 
@@ -282,6 +284,7 @@ _apm_tracer = None
 _sql_tuner = None
 _privacy_auditor = None
 _tuning_harness = None
+_governance_board = None
 
 from src.app.services.enterprise_tuning_service.multi_db_manager import db_manager, DynamicDatabaseClient
 
@@ -327,6 +330,39 @@ def get_tuning_harness():
     if _tuning_harness is None:
         _tuning_harness = SQLTuningHarness()
     return _tuning_harness
+
+def get_governance_board():
+    global _governance_board
+    if _governance_board is None:
+        # Reuse the existing specialist singletons so the board shares their state/LLM client.
+        _governance_board = SQLGovernanceBoard(
+            sql_tuner=get_sql_tuner(),
+            privacy_auditor=get_privacy_auditor(),
+            tuning_harness=get_tuning_harness(),
+        )
+    return _governance_board
+
+
+def _fetch_explain_plan_sync(sql: str) -> str:
+    """Best-effort EXPLAIN plan fetch from the active DB (returns a note on failure)."""
+    db_client = get_database_client()
+    try:
+        with db_client.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(f"EXPLAIN {sql}")
+                rows = cursor.fetchall()
+                if getattr(db_client, "dialect", "postgresql") == "mysql":
+                    formatted = []
+                    for r in rows:
+                        if isinstance(r, dict):
+                            formatted.append(", ".join(f"{k}: {v}" for k, v in r.items()))
+                        else:
+                            formatted.append(", ".join(str(val) for val in r))
+                    return "\n".join(formatted)
+                return "\n".join(str(r[0]) for r in rows)
+    except Exception as e:
+        logger.warning(f"Failed to fetch explain plan: {e}")
+        return f"Explain Plan not available: {str(e)}"
 
 
 class OptimizeRequestModel(BaseModel):
@@ -744,4 +780,63 @@ async def audit_sql_anti_patterns(req: AntiPatternAuditRequest):
         "ai_issues": ai_issues,
         "overall_health_score": max(20, 100 - (len(static_issues) * 20) - (len(ai_issues) * 15))
     }
+
+
+class GovernanceReviewRequest(BaseModel):
+    sql_query: str = Field(..., description="The SQL statement to submit for multi-agent board review")
+    run_sandbox: bool = Field(
+        default=False,
+        description="If true, also run the transactional sandbox benchmark agent (slower)."
+    )
+
+
+@router.post(
+    "/enterprise/agents/review",
+    summary="Multi-agent SQL Governance Board review",
+    description=(
+        "Coordinates specialist AI agents (Performance / Security & Compliance / "
+        "Anti-Pattern / optional Sandbox) under a Supervisor that returns one "
+        "consolidated verdict, risk score, and prioritized action items in Chinese."
+    ),
+)
+async def governance_board_review(request: GovernanceReviewRequest) -> Dict[str, Any]:
+    try:
+        sql = request.sql_query.strip()
+        if not sql:
+            raise ValueError("sql_query cannot be empty")
+
+        db_client = get_database_client()
+        db_type = "MySQL" if getattr(db_client, "dialect", "postgresql") == "mysql" else "PostgreSQL"
+
+        loop = asyncio.get_event_loop()
+        explain_plan = await loop.run_in_executor(_executor, _fetch_explain_plan_sync, sql)
+
+        board = get_governance_board()
+        report = await loop.run_in_executor(
+            _executor,
+            lambda: board.review(sql, explain_plan=explain_plan, db_type=db_type, run_sandbox=request.run_sandbox),
+        )
+
+        # Surface this board review in the APM timeline for real-time visibility.
+        try:
+            get_apm_tracer().capture_sql_execution(
+                api_endpoint="/api/text2sql_lg_code/enterprise/agents/review",
+                http_method="POST",
+                sql_statement=sql,
+                execution_time_ms=0.0,
+                db_instance=getattr(db_client, "dbname", "causal_inference"),
+            )
+        except Exception as trace_err:
+            logger.debug(f"Board review APM capture skipped: {trace_err}")
+
+        return {"success": True, "explain_plan": explain_plan, "report": report.model_dump()}
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": str(e)})
+    except Exception as e:
+        logger.error(f"Governance board review endpoint failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": f"Failed to run governance review: {str(e)}"}
+        )
 

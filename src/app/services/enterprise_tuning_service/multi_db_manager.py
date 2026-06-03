@@ -1,5 +1,6 @@
 """Multi-Database Connection Manager supporting PostgreSQL and MySQL (local/remote)."""
 
+import os
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 import psycopg2
@@ -249,16 +250,37 @@ class GlobalMultiDBManager:
     """Manages active dynamic connections and system-wide overrides."""
 
     def __init__(self):
-        # Set default active database client to match the user's remote MySQL project via secure SSH Tunnel
-        self._active_client: Optional[DynamicDatabaseClient] = DynamicDatabaseClient(
-            dialect="mysql",
-            host="127.0.0.1",
-            port=13306,
-            dbname="aidemo1",
-            username="root",
-            password="Ajajnb187!"
-        )
+        # Optionally pre-activate a remote database override from environment variables.
+        # When ENTERPRISE_DB_DIALECT is unset, no override is applied and the system
+        # falls back to the default local PostgreSQL client (set during app startup).
+        # Credentials are NEVER hardcoded — configure them via .env / environment.
+        self._active_client: Optional[DynamicDatabaseClient] = self._build_env_override()
         self._default_client: Optional[Any] = None
+
+    @staticmethod
+    def _build_env_override() -> Optional["DynamicDatabaseClient"]:
+        """Build an initial active client from ENTERPRISE_DB_* env vars, if provided."""
+        dialect = os.environ.get("ENTERPRISE_DB_DIALECT")
+        if not dialect:
+            return None
+        try:
+            default_port = 3306 if dialect.lower().strip() == "mysql" else 5432
+            client = DynamicDatabaseClient(
+                dialect=dialect,
+                host=os.environ.get("ENTERPRISE_DB_HOST", "127.0.0.1"),
+                port=int(os.environ.get("ENTERPRISE_DB_PORT", str(default_port))),
+                dbname=os.environ.get("ENTERPRISE_DB_NAME", ""),
+                username=os.environ.get("ENTERPRISE_DB_USER", ""),
+                password=os.environ.get("ENTERPRISE_DB_PASSWORD", ""),
+            )
+            logger.info(
+                f"Loaded enterprise DB override from environment: "
+                f"{client.dialect}://{client.host}:{client.port}/{client.dbname}"
+            )
+            return client
+        except Exception as e:
+            logger.warning(f"Failed to build enterprise DB override from env, ignoring: {e}")
+            return None
 
     def set_default_client(self, client: Any):
         self._default_client = client
