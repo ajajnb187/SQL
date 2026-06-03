@@ -26,6 +26,7 @@ class SQLGenerator:
       UNANSWERABLE: [brief explanation of what data is missing]
     - NEVER invent or assume tables/columns that are not in the metadata
     - Check the metadata carefully before generating SQL
+    - Note: Year-over-Year (YoY) comparison is fully supported. The 'sales' table has current year's sales data, and the 'historical_sales' table has last year's (previous year) sales data. You can JOIN them on category_name or item_id to compare sales growth/decline.
 
     Mandatory Rules:
     - Always fully qualify table names using the causal_inference schema
@@ -90,7 +91,7 @@ class SQLGenerator:
                 system_prompt=self.SYSTEM_PROMPT,
                 user_prompt=user_prompt,
                 model="gpt-4o-mini",
-                temperature=0.3,  # Lower temperature for more consistent SQL
+                temperature=0.1,  # Ultra-low temperature for maximum SQL consistency and precision
             )
 
             # Check if the query is unanswerable

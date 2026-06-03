@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from src.settings import settings
 from src.utils.logging import get_logger
 from src.app.api.router import api_router
-from src.core.lifetime import LifecycleManager
+from src.core.lifetime import lifespan
 from src.middleware import ExceptionHandlerMiddleware
 from src.middleware.exception import ExceptionResponseModel
 
@@ -38,11 +38,8 @@ def get_app() -> FastAPI:
             docs_url="/api/docs",
             redoc_url="/api/redoc",
             openapi_url="/api/openapi.json",
+            lifespan=lifespan,
         )
-
-        # Register startup and shutdown events 
-        LifecycleManager.register_startup_event(app)
-        LifecycleManager.register_shutdown_event(app)
 
         # Add middleware
         app.add_middleware(ExceptionHandlerMiddleware)

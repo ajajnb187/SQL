@@ -26,7 +26,7 @@ class ApplicationSettings(BaseSettings):
     
     host: str = "0.0.0.0"
     port: int = int(os.environ.get("PORT", "8090"))
-    workers_count: int = 3
+    workers_count: int = 1
     reload: bool = True
     environment: str = os.environ.get("ENVIRONMENT", "Development")
     log_level: str = os.environ.get("LOG_LEVEL", "DEBUG")
@@ -101,6 +101,7 @@ class OpenAISettings(BaseSettings):
     )
     
     api_key: str = os.environ.get("OPENAI_API_KEY")
+    base_url: str | None = os.environ.get("OPENAI_BASE_URL", None)
     model: str = os.environ.get("OPENAI_MODEL", "gpt-4o")
     embedding_model: str = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
     
@@ -109,6 +110,8 @@ class OpenAISettings(BaseSettings):
         # Fallback to non-prefixed variables for backward compatibility
         if not self.api_key:
             self.api_key = os.environ.get("OPENAI_API_KEY")
+        if not self.base_url:
+            self.base_url = os.environ.get("OPENAI_BASE_URL")
         if not self.model:
             self.model = os.environ.get("OPENAI_MODEL", "gpt-4o")
         if not self.embedding_model:

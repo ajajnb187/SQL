@@ -24,6 +24,7 @@ class LLMClient:
             model: Model name (defaults to settings)
         """
         self.api_key = settings.openai.api_key
+        self.base_url = settings.openai.base_url
         self.model = settings.openai.model
 
         self._client: Optional[OpenAI] = None
@@ -41,6 +42,7 @@ class LLMClient:
             
             self._client = OpenAI(
                 api_key=self.api_key,
+                base_url=self.base_url,
             )
             logger.debug("OpenAI client initialized successfully")
         
@@ -89,8 +91,8 @@ class LLMClient:
                 {"role": "user", "content": user_prompt},
             ]
             
-            # Use the model from parameter or default to settings model
-            model_to_use = model if model else self.model
+            # Use the settings model if configured, otherwise fallback to the parameter
+            model_to_use = self.model if self.model else model
             
             response = self._client.chat.completions.create(
                 model=model_to_use,

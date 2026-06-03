@@ -90,7 +90,17 @@ class SQLValidator:
 
         cleaned_query = sql_query.strip()
 
-        # Remove markdown code fences (```sql, ```, etc.)
+        # Try to extract SQL from markdown code block anywhere in the text
+        markdown_match = re.search(r'```sql\s*(.*?)\s*```', cleaned_query, re.DOTALL | re.IGNORECASE)
+        if markdown_match:
+            cleaned_query = markdown_match.group(1)
+        else:
+            # Fallback to general code blocks if 'sql' prefix is missing
+            markdown_match_generic = re.search(r'```\s*(.*?)\s*```', cleaned_query, re.DOTALL)
+            if markdown_match_generic:
+                cleaned_query = markdown_match_generic.group(1)
+
+        # Remove markdown code fences if they are still at the start/end
         if cleaned_query.startswith('```'):
             # Find the first newline after ```
             first_newline = cleaned_query.find('\n')

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from httpx import AsyncClient
 from src.utils.logging import get_logger
@@ -20,78 +21,73 @@ def get_text2sql_service() -> Text2SQLService:
     return _text2sql_service
 
 
-def get_database_client() -> DatabaseClient:
-    """Get the singleton database client instance."""
+def get_database_client():
+    """Get the active database client instance (supports dynamic overrides)."""
     global _database_client
+    from src.app.services.enterprise_tuning_service.multi_db_manager import db_manager
     if _database_client is None:
         raise RuntimeError("Database client not initialized. Application not started properly.")
-    return _database_client
+    return db_manager.get_client()
 
 
-class LifecycleManager:
-    """Manages FastAPI application lifecycle events."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manages FastAPI application lifespan events."""
+    global _text2sql_service, _database_client
+    try:
+        logger.info("Initializing HTTPX AsyncClient on startup")
+        app.state.httpx_client = AsyncClient()
+        logger.debug("HTTPX AsyncClient initialized successfully")
 
-    @staticmethod
-    def register_startup_event(app: FastAPI) -> None:
-        """
-        Register startup event to initialize resources.
+        # Initialize database client singleton
+        logger.info("Initializing Database client on startup")
+        _database_client = DatabaseClient()
+        from src.app.services.enterprise_tuning_service.multi_db_manager import db_manager
+        db_manager.set_default_client(_database_client)
+        app.state.database_client = _database_client
+        logger.debug("Database client initialized successfully")
 
-        Args:
-            app: FastAPI application instance.
-        """
-        async def startup() -> None:
-            global _text2sql_service, _database_client
-            try:
-                logger.info("Initializing HTTPX AsyncClient on startup")
-                app.state.httpx_client = AsyncClient()
-                logger.debug("HTTPX AsyncClient initialized successfully")
+        # Initialize Text2SQL service singleton
+        logger.info("Initializing Text2SQL service on startup")
+        _text2sql_service = Text2SQLService()
+        app.state.text2sql_service = _text2sql_service
+        logger.debug("Text2SQL service initialized successfully")
 
-                # Initialize database client singleton
-                logger.info("Initializing Database client on startup")
-                _database_client = DatabaseClient()
-                app.state.database_client = _database_client
-                logger.debug("Database client initialized successfully")
+        # Start the background Database Zero-Invasive Query Sensor Agent
+        logger.info("Starting background Database Query Sensor Agent on startup")
+        from src.app.services.enterprise_tuning_service import query_sensor
+        query_sensor.start()
 
-                # Initialize Text2SQL service singleton
-                logger.info("Initializing Text2SQL service on startup")
-                _text2sql_service = Text2SQLService()
-                app.state.text2sql_service = _text2sql_service
-                logger.debug("Text2SQL service initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize application resources: {str(e)}")
+        raise
 
-            except Exception as e:
-                logger.error(f"Failed to initialize application resources: {str(e)}")
-                raise
+    yield  # Hand over control to FastAPI
 
-        app.add_event_handler("startup", startup)
+    # This runs AFTER shutdown
+    try:
+        # Stop background query sensor agent
+        logger.info("Stopping background Database Query Sensor Agent on shutdown")
+        try:
+            from src.app.services.enterprise_tuning_service import query_sensor
+            query_sensor.stop()
+        except Exception as e:
+            logger.warning(f"Failed to stop Database Query Sensor Agent: {e}")
 
-    @staticmethod
-    def register_shutdown_event(app: FastAPI) -> None:
-        """
-        Register shutdown event to clean up resources.
+        logger.info("Closing HTTPX AsyncClient on shutdown")
+        if hasattr(app.state, 'httpx_client') and app.state.httpx_client:
+            await app.state.httpx_client.aclose()
+            logger.debug("HTTPX AsyncClient closed successfully")
 
-        Args:
-            app: FastAPI application instance.
-        """
-        async def shutdown() -> None:
-            global _text2sql_service, _database_client
-            try:
-                logger.info("Closing HTTPX AsyncClient on shutdown")
-                if hasattr(app.state, 'httpx_client') and app.state.httpx_client:
-                    await app.state.httpx_client.aclose()
-                    logger.debug("HTTPX AsyncClient closed successfully")
+        # Close database connections
+        logger.info("Closing database connections on shutdown")
+        if _database_client:
+            _database_client.close()
+            _database_client = None
+            logger.debug("Database connections closed successfully")
 
-                # Close database connections
-                logger.info("Closing database connections on shutdown")
-                if _database_client:
-                    _database_client.close()
-                    _database_client = None
-                    logger.debug("Database connections closed successfully")
+        # Clear service reference
+        _text2sql_service = None
 
-                # Clear service reference
-                _text2sql_service = None
-
-            except Exception as e:
-                logger.error(f"Failed to close resources: {str(e)}")
-                # Suppress errors to ensure shutdown completes
-
-        app.add_event_handler("shutdown", shutdown)
+    except Exception as e:
+        logger.error(f"Failed to close resources: {str(e)}")
