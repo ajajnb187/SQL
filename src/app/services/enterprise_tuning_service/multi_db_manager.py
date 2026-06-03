@@ -101,7 +101,9 @@ class DynamicDatabaseClient:
                     port=self.port,
                     database=self.dbname,
                     user=self.username,
-                    password=self.password
+                    password=self.password,
+                    connect_timeout=3,
+                    read_timeout=3
                 )
             else:
                 raise ValueError(f"Unsupported dialect: {self.dialect}")
@@ -162,7 +164,9 @@ class DynamicDatabaseClient:
                     database=self.dbname,
                     user=self.username,
                     password=self.password,
-                    cursorclass=pymysql.cursors.DictCursor
+                    cursorclass=pymysql.cursors.DictCursor,
+                    connect_timeout=3,
+                    read_timeout=3
                 )
                 with conn.cursor() as cursor:
                     cursor.execute(sql_query)

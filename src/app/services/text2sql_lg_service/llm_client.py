@@ -1,6 +1,7 @@
 """LLM client for OpenAI interactions."""
 
 import os
+import httpx
 from typing import Optional, Dict, Any, List
 from openai import OpenAI
 from openai._exceptions import APIError, APIConnectionError, RateLimitError
@@ -43,6 +44,7 @@ class LLMClient:
             self._client = OpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url,
+                http_client=httpx.Client(trust_env=False)
             )
             logger.debug("OpenAI client initialized successfully")
         

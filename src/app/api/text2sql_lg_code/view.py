@@ -351,10 +351,16 @@ async def list_traces(limit: int = 15) -> List[Dict[str, Any]]:
         )
 
 
+class BenchmarkRequestModel(BaseModel):
+    original_sql: str = Field(..., description="The original SQL statement")
+    optimized_sql: str = Field(..., description="The optimized rewritten SQL statement")
+    suggested_indexes: List[str] = Field(default_factory=list, description="List of index DDL statements to test")
+
+
 @router.post(
     "/enterprise/tuning/optimize",
-    summary="Optimize and Audit SQL Query",
-    description="Submits query to fetch explain plan, triggers AI-tuning rewrite, PII compliance audit, and transaction sandbox performance test."
+    summary="Stage 1: Analyze and Propose Optimizations",
+    description="Submits query to fetch explain plan, triggers AI-tuning rewrite in Chinese, and PII compliance audit. No sandbox run yet."
 )
 async def optimize_query_endpoint(request: OptimizeRequestModel) -> Dict[str, Any]:
     try:
@@ -362,8 +368,9 @@ async def optimize_query_endpoint(request: OptimizeRequestModel) -> Dict[str, An
         if not sql:
             raise ValueError("sql_query cannot be empty")
             
-        # 1. Fetch Explain Plan from PostgreSQL safely
+        # 1. Fetch Explain Plan safely from current connected database
         db_client = get_database_client()
+        db_type = "MySQL" if db_client.dialect == "mysql" else "PostgreSQL"
         explain_plan = ""
         try:
             loop = asyncio.get_event_loop()
@@ -373,7 +380,16 @@ async def optimize_query_endpoint(request: OptimizeRequestModel) -> Dict[str, An
                     with conn.cursor() as cursor:
                         cursor.execute(f"EXPLAIN {sql}")
                         rows = cursor.fetchall()
-                        return "\n".join([r[0] for r in rows])
+                        if db_client.dialect == "mysql":
+                            formatted = []
+                            for r in rows:
+                                if isinstance(r, dict):
+                                    formatted.append(", ".join(f"{k}: {v}" for k, v in r.items()))
+                                else:
+                                    formatted.append(", ".join(str(val) for val in r))
+                            return "\n".join(formatted)
+                        else:
+                            return "\n".join([str(r[0]) for r in rows])
                         
             explain_plan = await loop.run_in_executor(_executor, fetch_explain)
         except Exception as e:
@@ -385,7 +401,7 @@ async def optimize_query_endpoint(request: OptimizeRequestModel) -> Dict[str, An
         loop = asyncio.get_event_loop()
         tuning_rec = await loop.run_in_executor(
             _executor, 
-            lambda: tuner.optimize_query(sql, explain_plan)
+            lambda: tuner.optimize_query(sql, explain_plan, db_type=db_type)
         )
 
         # 3. Run Privacy Compliance Auditor
@@ -395,38 +411,68 @@ async def optimize_query_endpoint(request: OptimizeRequestModel) -> Dict[str, An
             lambda: auditor.audit_query(sql)
         )
 
-        # 4. Execute Transaction Sandbox Performance Evaluation Harness
+        return {
+            "success": True,
+            "explain_plan": explain_plan,
+            "tuning_recommendation": tuning_rec.model_dump(),
+            "privacy_report": privacy_report.model_dump()
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": str(e)})
+    except Exception as e:
+        logger.error(f"Optimization analysis endpoint failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": f"Failed to analyze query: {str(e)}"}
+        )
+
+
+@router.post(
+    "/enterprise/tuning/benchmark",
+    summary="Stage 2: Run Sandbox Transaction Benchmark",
+    description="Applies selected indexes, executes original vs optimized SQL queries in a read-only transaction sandbox, and reports precise speedup metrics."
+)
+async def benchmark_query_endpoint(request: BenchmarkRequestModel) -> Dict[str, Any]:
+    try:
+        orig_sql = request.original_sql.strip()
+        opt_sql = request.optimized_sql.strip()
+        indexes = request.suggested_indexes
+        
+        if not orig_sql:
+            raise ValueError("original_sql cannot be empty")
+            
+        loop = asyncio.get_event_loop()
+        
+        # Execute Transaction Sandbox Performance Evaluation Harness
         harness = get_tuning_harness()
         harness_report = await loop.run_in_executor(
             _executor,
-            lambda: harness.evaluate_tuning(sql, tuning_rec.optimized_sql, tuning_rec.suggested_indexes)
+            lambda: harness.evaluate_tuning(orig_sql, opt_sql, indexes)
         )
         
-        # 5. Intercept this optimization call itself and register it in APM traces for immediate visual feed!
+        # Register this benchmark run in APM traces for real-time visualization!
         tracer = get_apm_tracer()
         tracer.capture_sql_execution(
-            api_endpoint="/api/text2sql_lg_code/enterprise/tuning/optimize",
+            api_endpoint="/api/text2sql_lg_code/enterprise/tuning/benchmark",
             http_method="POST",
-            sql_statement=sql,
+            sql_statement=orig_sql,
             execution_time_ms=harness_report.original_latency_ms,
             db_instance="causal_inference"
         )
 
         return {
             "success": True,
-            "explain_plan": explain_plan,
-            "tuning_recommendation": tuning_rec.model_dump(),
-            "privacy_report": privacy_report.model_dump(),
             "performance_report": harness_report.model_dump()
         }
         
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": str(e)})
     except Exception as e:
-        logger.error(f"Optimization endpoint failed: {e}")
+        logger.error(f"Tuning benchmark endpoint failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": f"Failed to optimize query: {str(e)}"}
+            detail={"error": f"Failed to benchmark query: {str(e)}"}
         )
 
 

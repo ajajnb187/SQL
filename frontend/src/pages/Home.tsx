@@ -93,6 +93,28 @@ const Home = () => {
   const [tuningLoading, setTuningLoading] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
+  // Stage 2 selected states
+  const [selectedSql, setSelectedSql] = useState("");
+  const [selectedIndexes, setSelectedIndexes] = useState<string[]>([]);
+  const [benchmarkLoading, setBenchmarkLoading] = useState(false);
+
+  // Memoized states to detect if SQL is already optimal
+  const isAlreadyOptimal = useMemo(() => {
+    if (!tuningResult?.tuning_recommendation) return false;
+    const original = tuningSql.trim().replace(/\s+/g, " ").toLowerCase();
+    const optimized = (tuningResult.tuning_recommendation.optimized_sql || "").trim().replace(/\s+/g, " ").toLowerCase();
+    const hasIndexes = tuningResult.tuning_recommendation.suggested_indexes && tuningResult.tuning_recommendation.suggested_indexes.length > 0;
+    return original === optimized && !hasIndexes;
+  }, [tuningSql, tuningResult]);
+
+  const isSqlOptimalButHasIndexes = useMemo(() => {
+    if (!tuningResult?.tuning_recommendation) return false;
+    const original = tuningSql.trim().replace(/\s+/g, " ").toLowerCase();
+    const optimized = (tuningResult.tuning_recommendation.optimized_sql || "").trim().replace(/\s+/g, " ").toLowerCase();
+    const hasIndexes = tuningResult.tuning_recommendation.suggested_indexes && tuningResult.tuning_recommendation.suggested_indexes.length > 0;
+    return original === optimized && hasIndexes;
+  }, [tuningSql, tuningResult]);
+
   // Dynamic Database Connection States
   const [dbDialect, setDbDialect] = useState<"postgresql" | "mysql">("postgresql");
   const [dbHost, setDbHost] = useState("localhost");
@@ -190,7 +212,7 @@ const Home = () => {
     navigate("/");
   };
 
-  // Run AI SQL Tuning and Sandbox Harness
+  // Run AI SQL Tuning and Sandbox Harness - Stage 1: Analyze and Propose
   const handleRunTuning = async () => {
     if (!tuningSql.trim()) {
       toast.error("请先输入需要优化的 SQL 代码");
@@ -207,16 +229,54 @@ const Home = () => {
       if (response.ok) {
         const data = await response.json();
         setTuningResult(data);
-        toast.success("大模型事务沙盒调优评测完成！");
+        setSelectedSql(data.tuning_recommendation?.optimized_sql || tuningSql);
+        setSelectedIndexes(data.tuning_recommendation?.suggested_indexes || []);
+        toast.success("AI 优化建议与合规诊断分析生成成功！请在右侧选择和确认您的方案。");
       } else {
         const err = await response.json();
-        toast.error(err.detail?.error || "AI 调优沙箱执行异常");
+        toast.error(err.detail?.error || "AI 优化诊断分析失败");
       }
     } catch (error) {
       console.error(error);
-      toast.error("网络连接超时，事务沙箱测试失败");
+      toast.error("网络连接超时，AI 优化诊断失败");
     } finally {
       setTuningLoading(false);
+    }
+  };
+
+  // Run Sandbox Benchmark - Stage 2: Sandbox physical benchmark
+  const handleRunBenchmark = async () => {
+    if (!tuningResult) {
+      toast.error("请先执行第一阶段 AI 智能诊断分析");
+      return;
+    }
+    setBenchmarkLoading(true);
+    try {
+      const response = await fetch("/api/text2sql_lg_code/enterprise/tuning/benchmark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          original_sql: tuningSql,
+          optimized_sql: selectedSql,
+          suggested_indexes: selectedIndexes
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTuningResult((prev: any) => ({
+          ...prev,
+          performance_report: data.performance_report
+        }));
+        toast.success("🏆 沙箱隔离事务测试成功！性能数据已刷新。");
+      } else {
+        const err = await response.json();
+        toast.error(err.detail?.error || "沙盒评测执行失败");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("网络连接超时，沙箱评测连接失败");
+    } finally {
+      setBenchmarkLoading(false);
     }
   };
 
@@ -771,12 +831,12 @@ const Home = () => {
                       {tuningLoading ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          事务级评估沙盒真机执行中...
+                          AI 智能诊断与重构分析中...
                         </>
                       ) : (
                         <>
                           <Sparkles className="w-4 h-4" />
-                          立即运行 3D 沙盒深度评测
+                          第一阶段：AI 智能诊断与优化建议
                         </>
                       )}
                     </Button>
@@ -793,9 +853,9 @@ const Home = () => {
                       <Sparkles className="w-5 h-5 text-purple-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-800 text-sm">正在加载 PostgreSQL 执行计划并运行评估马车...</h3>
+                      <h3 className="font-bold text-slate-800 text-sm">正在加载执行计划并运行大模型诊断中...</h3>
                       <p className="text-slate-500 text-[10px] font-semibold mt-2 max-w-sm mx-auto leading-relaxed">
-                        系统正在执行 EXPLAIN、大模型智能代码逻辑推重写、PII 合规字段扫描、并在专享只读沙盒事务中尝试应用临时索引以校验提升率。大语言模型推理约耗时 10-15s。
+                        系统正在执行 EXPLAIN 计划获取、大模型智能瓶颈诊断、优化改写及 PII 数据安全合规审查。第一阶段预计耗时约 5-10s。
                       </p>
                     </div>
                   </Card>
@@ -828,79 +888,174 @@ const Home = () => {
 
                       {/* 选项卡 1：沙盒真机耗时实测 */}
                       <TabsContent value="performance" className="space-y-6 mt-4">
-                        <Card className="bg-white border-slate-200/90 shadow-sm rounded-2xl">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold text-indigo-600">只读事务隔离性能压测结果</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-6">
-                            {/* KPI 框组 */}
-                            <div className="grid grid-cols-3 gap-4">
-                              <div className="p-4 rounded-xl bg-slate-50 border border-slate-150 text-center shadow-inner">
-                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">调优前耗时</p>
-                                <p className="text-base font-black text-slate-700 mt-1">{tuningResult.performance_report.original_latency_ms.toFixed(2)} ms</p>
-                              </div>
-                              <div className="p-4 rounded-xl bg-slate-50 border border-slate-150 text-center shadow-inner">
-                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">调优后耗时</p>
-                                <p className="text-base font-black text-emerald-600 mt-1">{tuningResult.performance_report.optimized_latency_ms.toFixed(2)} ms</p>
-                              </div>
-                              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-center">
-                                <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest">响应延迟改善</p>
-                                <p className="text-base font-black text-emerald-600 mt-1">
-                                  {tuningResult.performance_report.latency_reduction_pct > 0 ? "+" : ""}
-                                  {tuningResult.performance_report.latency_reduction_pct.toFixed(1)}%
-                                </p>
-                              </div>
-                            </div>
+                        {!tuningResult.performance_report ? (
+                          <Card className="bg-white border-slate-200/90 shadow-sm rounded-2xl">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs font-bold text-indigo-600 flex items-center gap-1.5">
+                                <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
+                                第二阶段：方案选定与隔离沙箱实测
+                              </CardTitle>
+                              <CardDescription className="text-[10px] text-slate-500 font-semibold mt-1">
+                                第一阶段 AI 智能诊断已完成！大模型已为您推演出以下重写和索引优化方案。请审核、修改、勾选后，一键启动物理沙箱测速：
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-5 p-6">
+                              {isAlreadyOptimal && (
+                                <Alert className="bg-emerald-50 border-emerald-200/80 text-emerald-800 rounded-xl mb-2">
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                  <AlertTitle className="text-emerald-700 font-extrabold text-[10px] uppercase tracking-wider">✨ 专家系统裁决：当前 SQL 结构已是理论最优！</AlertTitle>
+                                  <AlertDescription className="text-[11px] text-emerald-600/90 font-semibold mt-1 leading-relaxed">
+                                    大语言模型与物理执行计划评估判定：该查询（如简单的 COUNT(*) 统计）其语法、表关联、WHERE 条件等在结构上已是极致最简，**无需进行任何语句重写，且目前暂无针对该语句推荐的临时物理索引**。当前性能已达到该 Schema 下的理论极限！
+                                  </AlertDescription>
+                                </Alert>
+                              )}
 
-                            {/* 耗时柱状图 Recharts */}
-                            {performanceChartData.length > 0 && (
-                              <div className="h-44 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <BarChart data={performanceChartData} layout="vertical" barSize={16}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                    <XAxis type="number" stroke="#64748b" fontSize={9} unit="ms" />
-                                    <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={9} width={90} />
-                                    <ChartTooltip
-                                      contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#1e293b", fontSize: "11px" }}
-                                    />
-                                    <Bar dataKey="耗时">
-                                      {performanceChartData.map((entry, idx) => (
-                                        <Cell key={`cell-${idx}`} fill={entry.color} />
-                                      ))}
-                                    </Bar>
-                                  </BarChart>
-                                </ResponsiveContainer>
+                              {isSqlOptimalButHasIndexes && (
+                                <Alert className="bg-blue-50 border-blue-200/80 text-blue-800 rounded-xl mb-2">
+                                  <Info className="h-4 w-4 text-blue-600" />
+                                  <AlertTitle className="text-blue-700 font-extrabold text-[10px] uppercase tracking-wider">💡 语句结构已最优，建议通过方案 B 建立物理索引提速</AlertTitle>
+                                  <AlertDescription className="text-[11px] text-blue-600/90 font-semibold mt-1 leading-relaxed">
+                                    专家诊断判定，当前查询的语法结构已是非常紧凑的最优解，在代码层面无需重写（因此重写 SQL 与原 SQL 一致）。但为了获得物理级提速，强烈建议您勾选下方的方案 B（物理索引）进行压测验证！
+                                  </AlertDescription>
+                                </Alert>
+                              )}
+                              {/* 方案 A: SQL 语句 */}
+                              <div className="space-y-2">
+                                <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                                  <span className="w-1.5 h-3 bg-indigo-500 rounded-full" />
+                                  方案 A：AI 优化重写 SQL 确认（支持编辑修改）
+                                </label>
+                                <Textarea
+                                  value={selectedSql}
+                                  onChange={(e) => setSelectedSql(e.target.value)}
+                                  className="min-h-[120px] font-mono text-[11px] bg-slate-50 border-slate-200 text-slate-800 focus-visible:ring-indigo-500/20 rounded-xl"
+                                />
                               </div>
-                            )}
 
-                            {/* 指标红绿灯组 */}
-                            <div className="grid grid-cols-2 gap-4 text-[10px] font-mono">
-                              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200">
-                                <CheckCircle2 className={`w-3.5 h-3.5 ${tuningResult.performance_report.ddl_applied_successfully ? "text-emerald-500" : "text-slate-400"}`} />
-                                <span className="text-slate-500 font-semibold">DDL 模拟索引建立：</span>
-                                <span className="text-slate-700 font-extrabold ml-auto">
-                                  {tuningResult.performance_report.ddl_applied_successfully ? "建立成功" : "无需建立"}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200">
-                                <CheckCircle2 className={`w-3.5 h-3.5 ${tuningResult.performance_report.semantic_equivalence_verified ? "text-emerald-500 animate-pulse" : "text-red-500"}`} />
-                                <span className="text-slate-500 font-semibold">物理语义等价校验：</span>
-                                <span className="text-slate-700 font-extrabold ml-auto">
-                                  {tuningResult.performance_report.semantic_equivalence_verified ? "100% 吻合" : "校验失败"}
-                                </span>
-                              </div>
-                            </div>
+                              {/* 方案 B: 索引建立 */}
+                              {tuningResult.tuning_recommendation?.suggested_indexes && tuningResult.tuning_recommendation.suggested_indexes.length > 0 && (
+                                <div className="space-y-2">
+                                  <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-3 bg-purple-500 rounded-full" />
+                                    方案 B：AI 推荐物理索引 DDL 勾选确认（自动隔离应用）
+                                  </label>
+                                  <div className="space-y-2">
+                                    {tuningResult.tuning_recommendation.suggested_indexes.map((idx: string, indexIdx: number) => (
+                                      <label key={indexIdx} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono cursor-pointer hover:bg-slate-100/50 transition-colors">
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedIndexes.includes(idx)}
+                                          onChange={() => {
+                                            if (selectedIndexes.includes(idx)) {
+                                              setSelectedIndexes(prev => prev.filter(x => x !== idx));
+                                            } else {
+                                              setSelectedIndexes(prev => [...prev, idx]);
+                                            }
+                                          }}
+                                          className="mt-0.5 h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                        />
+                                        <span className="text-slate-700 select-none break-all">{idx}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
 
-                            {/* 裁决书面板 */}
-                            <Alert className="bg-slate-50 border-slate-200">
-                              <Terminal className="h-4 w-4 text-purple-600" />
-                              <AlertTitle className="text-purple-700 font-extrabold text-[10px] uppercase tracking-widest">沙箱物理性能裁决</AlertTitle>
-                              <AlertDescription className="text-xs text-slate-600 font-semibold leading-relaxed mt-1">
-                                {tuningResult.performance_report.performance_verdict}
-                              </AlertDescription>
-                            </Alert>
-                          </CardContent>
-                        </Card>
+                              {/* 立即实测按钮 */}
+                              <Button
+                                onClick={handleRunBenchmark}
+                                disabled={benchmarkLoading}
+                                className="w-full h-12 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-extrabold flex items-center justify-center gap-2 rounded-xl shadow-lg shadow-teal-500/10 text-xs border-0 mt-4 animate-bounce-short"
+                              >
+                                {benchmarkLoading ? (
+                                  <>
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    物理只读沙盒事务真机压力比对中...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Sparkles className="w-4 h-4" />
+                                    确认上述方案：立即开始沙箱事务实测 (Stage 2)
+                                  </>
+                                )}
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        ) : (
+                          <Card className="bg-white border-slate-200/90 shadow-sm rounded-2xl">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs font-bold text-indigo-600">只读事务隔离性能压测结果</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                              {/* KPI 框组 */}
+                              <div className="grid grid-cols-3 gap-4">
+                                <div className="p-4 rounded-xl bg-slate-50 border border-slate-150 text-center shadow-inner">
+                                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">调优前耗时</p>
+                                  <p className="text-base font-black text-slate-700 mt-1">{tuningResult.performance_report.original_latency_ms.toFixed(2)} ms</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-slate-50 border border-slate-150 text-center shadow-inner">
+                                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">调优后耗时</p>
+                                  <p className="text-base font-black text-emerald-600 mt-1">{tuningResult.performance_report.optimized_latency_ms.toFixed(2)} ms</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-center">
+                                  <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest">响应延迟改善</p>
+                                  <p className="text-base font-black text-emerald-600 mt-1">
+                                    {tuningResult.performance_report.latency_reduction_pct > 0 ? "+" : ""}
+                                    {tuningResult.performance_report.latency_reduction_pct.toFixed(1)}%
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* 耗时柱状图 Recharts */}
+                              {performanceChartData.length > 0 && (
+                                <div className="h-44 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={performanceChartData} layout="vertical" barSize={16}>
+                                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                      <XAxis type="number" stroke="#64748b" fontSize={9} unit="ms" />
+                                      <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={9} width={90} />
+                                      <ChartTooltip
+                                        contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#1e293b", fontSize: "11px" }}
+                                      />
+                                      <Bar dataKey="耗时">
+                                        {performanceChartData.map((entry, idx) => (
+                                          <Cell key={`cell-${idx}`} fill={entry.color} />
+                                        ))}
+                                      </Bar>
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              )}
+
+                              {/* 指标红绿灯组 */}
+                              <div className="grid grid-cols-2 gap-4 text-[10px] font-mono">
+                                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                                  <CheckCircle2 className={`w-3.5 h-3.5 ${tuningResult.performance_report.ddl_applied_successfully ? "text-emerald-500" : "text-slate-400"}`} />
+                                  <span className="text-slate-500 font-semibold">DDL 模拟索引建立：</span>
+                                  <span className="text-slate-700 font-extrabold ml-auto">
+                                    {tuningResult.performance_report.ddl_applied_successfully ? "建立成功" : "无需建立"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                                  <CheckCircle2 className={`w-3.5 h-3.5 ${tuningResult.performance_report.semantic_equivalence_verified ? "text-emerald-500 animate-pulse" : "text-red-500"}`} />
+                                  <span className="text-slate-500 font-semibold">物理语义等价校验：</span>
+                                  <span className="text-slate-700 font-extrabold ml-auto">
+                                    {tuningResult.performance_report.semantic_equivalence_verified ? "100% 吻合" : "校验失败"}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* 裁决书面板 */}
+                              <Alert className="bg-slate-50 border-slate-200">
+                                <Terminal className="h-4 w-4 text-purple-600" />
+                                <AlertTitle className="text-purple-700 font-extrabold text-[10px] uppercase tracking-widest">沙箱物理性能裁决</AlertTitle>
+                                <AlertDescription className="text-xs text-slate-600 font-semibold leading-relaxed mt-1">
+                                  {tuningResult.performance_report.performance_verdict}
+                                </AlertDescription>
+                              </Alert>
+                            </CardContent>
+                          </Card>
+                        )}
                       </TabsContent>
 
                       {/* 选项卡 2：DBA 诊断详情 */}
@@ -909,7 +1064,7 @@ const Home = () => {
                           <CardContent className="p-6 space-y-4 text-xs">
                             {/* 瓶颈分析 */}
                             <div>
-                              <p className="text-purple-600 font-extrabold text-[10px] uppercase tracking-widest mb-1.5">🚨 PostgreSQL 物理执行计划瓶颈拆解</p>
+                              <p className="text-purple-600 font-extrabold text-[10px] uppercase tracking-widest mb-1.5">🚨 {currentDbStatus?.dialect === "mysql" ? "MySQL" : "PostgreSQL"} 物理执行计划瓶颈拆解</p>
                               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-slate-600 leading-relaxed font-semibold">
                                 {tuningResult.tuning_recommendation.bottleneck_analysis}
                               </div>
@@ -1431,7 +1586,7 @@ public class APMInterceptor implements Interceptor {
         {/* 底部信息 */}
         <div className="mt-24 pt-6 border-t border-slate-900/60 text-center">
           <p className="text-xs text-slate-600 font-semibold">
-            futureOS 智能大语言模型数据库协同底座 • 基于 Model Context Protocol (MCP) 标准通信协议 • 本地 PostgreSQL 17 全力驱动
+            futureOS 智能大语言模型数据库协同底座 • 基于 Model Context Protocol (MCP) 标准通信协议 • {currentDbStatus ? `${currentDbStatus.dialect === "mysql" ? "MySQL" : "PostgreSQL"} (${currentDbStatus.dbname})` : "PostgreSQL 17"} 全力驱动
           </p>
         </div>
       </main>

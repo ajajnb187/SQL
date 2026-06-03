@@ -28,6 +28,8 @@ class SQLTuner:
     You are a Principal Database Administrator (DBA) and PostgreSQL/MySQL Performance Tuning Expert.
     Your task is to analyze a slow or inefficient SQL statement—including SELECT, INSERT, UPDATE, DELETE, and DDL operations—as well as its execution plan, identify core architectural bottlenecks, and provide an optimized rewritten query, index adjustments, or configuration strategies.
 
+    CRITICAL: All explanations, bottleneck analyses, and optimization strategies MUST be written entirely in Chinese (中文).
+
     Performance & Architectural Bottlenecks to look for:
     1. READ QUERY BOTTLENECK (SELECT):
        - Seq Scan (Sequential Scans) on high-cardinality tables.
@@ -82,16 +84,16 @@ class SQLTuner:
         {explain_plan}
         ```
         
-        Provide your expert tuning recommendations as a raw JSON matching this structure:
+        Provide your expert tuning recommendations as a raw JSON matching this structure (Remember: you MUST write all explanations, analyses, and strategies in Chinese):
         {{
             "original_sql": "{original_sql.replace('"', '\\"')}",
             "optimized_sql": "[The fully rewritten, optimized SQL query]",
             "suggested_indexes": [
                 "CREATE INDEX idx_your_table_column ON schema.table(column);"
             ],
-            "bottleneck_analysis": "[Detailed DBA explanation of why the original query is slow based on the EXPLAIN nodes]",
-            "optimization_strategy": "[What query restructuring techniques or indexes were used to optimize this]",
-            "estimated_speedup": "[Estimated performance improvement, e.g., '5x' or '100x']"
+            "bottleneck_analysis": "[用中文详细解释为什么原始 SQL 查询执行慢，具体指明是哪些执行计划节点或字段索引问题导致的瓶颈]",
+            "optimization_strategy": "[用中文详细说明您应用了哪些 SQL 重构技巧、CTE 改写或索引调整策略来实现极致提速]",
+            "estimated_speedup": "[中文估算性能提升，例如：'提速 5 倍' 或 '耗时大幅降低 80%']"
         }}
         
         Ensure your response is ONLY the raw JSON object, valid and parsable. Do not wrap it in ```json blocks or add conversational text.
@@ -107,14 +109,16 @@ class SQLTuner:
                 temperature=0.1,  # Ultra-deterministic for structural SQL generation
             )
             
-            # Clean possible markdown wrap from the LLM output
+            # Clean possible reasoning thinking process and markdown wrap from the LLM output
             cleaned_text = response_text.strip()
-            if cleaned_text.startswith("```json"):
-                cleaned_text = cleaned_text[7:]
-            elif cleaned_text.startswith("```"):
-                cleaned_text = cleaned_text[3:]
-            if cleaned_text.endswith("```"):
-                cleaned_text = cleaned_text[:-3]
+            if "</think>" in cleaned_text:
+                cleaned_text = cleaned_text.split("</think>")[-1].strip()
+            
+            if "```json" in cleaned_text:
+                cleaned_text = cleaned_text.split("```json")[-1].split("```")[0].strip()
+            elif "```" in cleaned_text:
+                cleaned_text = cleaned_text.split("```")[-1].split("```")[0].strip()
+            
             cleaned_text = cleaned_text.strip()
             
             import json

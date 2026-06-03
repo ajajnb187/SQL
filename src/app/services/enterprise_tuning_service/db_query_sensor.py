@@ -133,7 +133,7 @@ class DBQuerySensor:
                 sql = """
                     SELECT argument as query, 0.1 as total_time_ms
                     FROM mysql.general_log
-                    WHERE command_type = 'Query'
+                    WHERE command_type IN ('Query', 'Execute')
                       AND argument IS NOT NULL
                       AND argument NOT LIKE '%mysql.general_log%'
                       AND argument NOT LIKE '%enterprise/apm/collect%'
