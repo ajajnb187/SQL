@@ -310,7 +310,7 @@ const Results = () => {
             </div>
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-              <span>智能引擎：R1 (免计费)</span>
+              <span>智能引擎：DeepSeek-V3</span>
             </div>
           </div>
         </nav>
@@ -431,7 +431,7 @@ const Results = () => {
           <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 mb-6">
             <div className="flex items-center gap-3 mb-4">
               <RefreshCw className="w-5 h-5 text-indigo-500 animate-spin" />
-              <span className="text-xs font-bold text-slate-600">大语言模型（DeepSeek-R1-8B）正在解析数据库并执行多节点工作流中...</span>
+              <span className="text-xs font-bold text-slate-600">大语言模型（DeepSeek-V3）正在解析数据库并执行多节点工作流中...</span>
             </div>
             <div className="space-y-3">
               <Skeleton className="h-4 w-3/4 bg-slate-100" />
@@ -492,7 +492,7 @@ const Results = () => {
               {/* TAB 1: AI 智能摘要 */}
               {activeTab === "summary" && (
                 <div className="space-y-4">
-                  <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">AI 数据分析摘要 (DeepSeek-R1 报告)</h3>
+                  <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">AI 数据分析摘要 (DeepSeek-V3 报告)</h3>
                   <p className="text-slate-700 text-sm leading-relaxed font-semibold">
                     {latestResponse?.summary || "暂无 AI 摘要生成。"}
                   </p>

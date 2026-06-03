@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, Cell } from "recharts";
 import { toast } from "sonner";
+import GovernanceBoardView from "@/components/GovernanceBoardView";
 
 const suggestedQuestions = [
   {
@@ -75,7 +76,7 @@ interface APMTrace {
 }
 
 const Home = () => {
-  const [activeView, setActiveTab] = useState<"nl2sql" | "apm" | "tuner" | "datasource">("nl2sql");
+  const [activeView, setActiveTab] = useState<"nl2sql" | "apm" | "tuner" | "agents" | "datasource">("nl2sql");
   const [query, setQuery] = useState("");
   const [username, setUsername] = useState("管理员");
   const navigate = useNavigate();
@@ -293,9 +294,6 @@ const Home = () => {
           setDbPort(data.port);
           setDbName(data.dbname);
           setDbUser(data.username);
-          if (data.dialect === "mysql" && data.port === 13306) {
-            setDbPassword("Ajajnb187!");
-          }
         }
       }
     } catch (error) {
@@ -469,6 +467,17 @@ const Home = () => {
             AI 数据库调优沙盒
           </button>
           <button
+            onClick={() => setActiveTab("agents")}
+            className={`w-full px-4 py-3.5 rounded-xl text-xs font-bold flex items-center gap-3 transition-all duration-300 ${
+              activeView === "agents"
+                ? "bg-indigo-50 text-indigo-600 border border-indigo-100/60 shadow-sm"
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/50"
+            }`}
+          >
+            <Users className="w-4.5 h-4.5" />
+            多智能体 SQL 治理委员会
+          </button>
+          <button
             onClick={() => setActiveTab("datasource")}
             className={`w-full px-4 py-3.5 rounded-xl text-xs font-bold flex items-center gap-3 transition-all duration-300 ${
               activeView === "datasource"
@@ -488,7 +497,7 @@ const Home = () => {
             </div>
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-              <span>智能引擎：R1 (免计费)</span>
+              <span>智能引擎：DeepSeek-V3</span>
             </div>
           </div>
         </nav>
@@ -585,7 +594,7 @@ const Home = () => {
                 </span>
               </h1>
               <p className="text-slate-500 max-w-2xl text-sm leading-relaxed">
-                搭载 2026 全新限免 **DeepSeek-R1-8B** 深度推理引擎，智能纠错、智能关联表单、一秒即可将口语文字转化为完美可执行的 SQL 查询并呈现可视化图表。
+                搭载 DeepSeek-V3 大模型引擎，智能纠错、智能关联表单、一秒即可将口语文字转化为完美可执行的 SQL 查询并呈现可视化图表。
               </p>
             </div>
 
@@ -1582,6 +1591,8 @@ public class APMInterceptor implements Interceptor {
             </Card>
           </div>
         )}
+
+        {activeView === "agents" && <GovernanceBoardView />}
 
         {/* 底部信息 */}
         <div className="mt-24 pt-6 border-t border-slate-900/60 text-center">
