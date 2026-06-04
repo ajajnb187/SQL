@@ -79,6 +79,10 @@ def _get_auditor() -> PrivacyAuditor:
 def _get_harness() -> SQLTuningHarness:
     global _harness
     if _harness is None:
+        # Sandbox benchmarking needs a live DB client. Outside the FastAPI
+        # lifespan (standalone MCP server) we must initialize it ourselves.
+        from src.core.lifetime import ensure_database_client
+        ensure_database_client()
         _harness = SQLTuningHarness()
     return _harness
 
@@ -167,6 +171,11 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9000)
     args = parser.parse_args()
+
+    # Initialize the DB client up front so DB-backed tools (governance_review,
+    # benchmark_sql) work in this standalone process without the FastAPI lifespan.
+    from src.core.lifetime import ensure_database_client
+    ensure_database_client()
 
     if args.http:
         logger.info(f"Starting SQL Governance MCP server (HTTP) on {args.host}:{args.port}")

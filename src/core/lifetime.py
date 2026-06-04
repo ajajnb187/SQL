@@ -30,6 +30,22 @@ def get_database_client():
     return db_manager.get_client()
 
 
+def ensure_database_client() -> DatabaseClient:
+    """Initialize the global database client + db_manager default if not already done.
+
+    Idempotent and safe to call outside the FastAPI lifespan — e.g. from the
+    standalone MCP server (`mcp_app.py`) or any script that uses the enterprise
+    tuning tools without booting the web app.
+    """
+    global _database_client
+    from src.app.services.enterprise_tuning_service.multi_db_manager import db_manager
+    if _database_client is None:
+        _database_client = DatabaseClient()
+        db_manager.set_default_client(_database_client)
+        logger.debug("Database client initialized via ensure_database_client()")
+    return _database_client
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manages FastAPI application lifespan events."""
@@ -41,9 +57,7 @@ async def lifespan(app: FastAPI):
 
         # Initialize database client singleton
         logger.info("Initializing Database client on startup")
-        _database_client = DatabaseClient()
-        from src.app.services.enterprise_tuning_service.multi_db_manager import db_manager
-        db_manager.set_default_client(_database_client)
+        _database_client = ensure_database_client()
         app.state.database_client = _database_client
         logger.debug("Database client initialized successfully")
 
