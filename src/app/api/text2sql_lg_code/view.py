@@ -406,7 +406,8 @@ async def optimize_query_endpoint(request: OptimizeRequestModel) -> Dict[str, An
             
         # 1. Fetch Explain Plan safely from current connected database
         db_client = get_database_client()
-        db_type = "MySQL" if db_client.dialect == "mysql" else "PostgreSQL"
+        db_dialect = getattr(db_client, "dialect", "postgresql")
+        db_type = "MySQL" if db_dialect == "mysql" else "PostgreSQL"
         explain_plan = ""
         try:
             loop = asyncio.get_event_loop()
@@ -416,7 +417,7 @@ async def optimize_query_endpoint(request: OptimizeRequestModel) -> Dict[str, An
                     with conn.cursor() as cursor:
                         cursor.execute(f"EXPLAIN {sql}")
                         rows = cursor.fetchall()
-                        if db_client.dialect == "mysql":
+                        if db_dialect == "mysql":
                             formatted = []
                             for r in rows:
                                 if isinstance(r, dict):
