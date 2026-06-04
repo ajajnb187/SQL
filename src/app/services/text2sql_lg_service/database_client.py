@@ -15,7 +15,12 @@ logger = get_logger(__name__)
 
 class DatabaseClient:
     """Client for PostgreSQL database operations."""
-    
+
+    # This client only ever talks to PostgreSQL. Exposing `dialect` keeps it
+    # interchangeable with DynamicDatabaseClient wherever the multi-database
+    # code branches on dialect (e.g. the tuning EXPLAIN path).
+    dialect: str = "postgresql"
+
     def __init__(
         self,
         host: Optional[str] = None,
