@@ -82,9 +82,9 @@
             <p class="main-project-desc">面向 SQL 开发、慢查询排查和上线前质量审查的 AI 辅助平台，支持自然语言生成查询、执行结果摘要、SQL 调优建议和风险审查，帮助开发人员更快定位 SQL 性能与安全问题</p>
             <div class="main-project-tech"><strong>技术栈：</strong>Python、FastAPI、LangGraph、LangChain OpenAI、PostgreSQL/MySQL、React、TypeScript、MCP、Agent Skills</div>
             <ol class="main-project-list">
-              <li>基于 <strong>LangGraph</strong>编排自然语言转 SQL 工作流，结合库表元数据生成查询语句，并通过 LLM 对字段、语法、表权限和 LIMIT 约束进行校验；校验失败自动回流重试，减少无效 SQL 和越权查询，提高 SQL 开发与结果分析效率</li>
-              <li>实现 <strong>慢 SQL 智能调优</strong>能力，自动获取 EXPLAIN 执行计划，围绕高并发场景常见瓶颈分析索引缺失、全表扫描、排序/分组开销、JOIN 条件不合理、分页过深等问题，输出 SQL 改写、索引建议和瓶颈说明，帮助开发快速定位性能问题</li>
-              <li>设计 <strong>多智能体 SQL 治理流程</strong>：由 Supervisor 调度性能、安全、规范三类专家 Agent 并行评估，统一生成风险等级、推荐 SQL 与整改建议；基于 <strong>MCP</strong> 封装底层检测工具，并通过 <strong>Agent Skills</strong> 定义综合评审流程，使 Agent 能按场景选择能力完成 SQL 治理闭环</li>
+              <li>基于 <strong>LangGraph</strong> 将「读取 schema 元数据 → 生成 SQL → 校验 → 执行 → 结果摘要 → 追问推荐」编排为带<strong>条件路由与失败重试</strong>的状态机工作流；生成阶段注入表/列 schema 约束，再由 LLM 二次校验语法与字段合法性、<strong>自动补全 LIMIT 分页</strong>，不通过则自动回流重试（≤3 次）并优雅降级，显著降低不可执行 SQL 与跨 schema 误查，提升取数与分析效率</li>
+              <li>实现 <strong>慢 SQL 智能调优</strong>：自动抓取 <strong>EXPLAIN 执行计划</strong>，识别全表扫描、索引缺失、大排序、JOIN/子查询不合理、分页过深等瓶颈，输出<strong>重写 SQL + 索引 DDL + 预计提速</strong>；并在「最后强制回滚」的<strong>事务沙盒</strong>中实跑优化前后查询，量化耗时降幅并校验结果一致性，保证调优建议安全可信</li>
+              <li>设计 <strong>多智能体 SQL 治理委员会</strong>：Supervisor 主审官<strong>并发</strong>调度性能、安全、反模式（及可选沙盒实测）专家 Agent，按确定性风险公式给出 通过 / 限期整改 / 拦截 裁决与整改清单，单个 Agent 失败不影响整体；并用 <strong>fastmcp</strong> 将各能力封装为标准 <strong>MCP</strong> 工具、以 <strong>Agent Skills（SKILL.md）</strong>定义评审流程，可供 Claude Desktop / Cursor 等客户端直接调用</li>
             </ol>
           </div>
         </section>
