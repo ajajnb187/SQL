@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电商客服 AI Agent 实习项目 · 面试通关文档</title>
+<style>
+:root{--brand:#1e3a5f;--brand2:#2563eb;--bg:#f5f7fa;--code:#f1f5f9;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:#1f2937;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;line-height:1.75;}
+.container{max-width:880px;margin:0 auto;padding:40px 24px 80px;background:#fff;box-shadow:0 1px 24px rgba(0,0,0,.06);}
+h1{font-size:26px;color:var(--brand);border-bottom:3px solid var(--brand);padding-bottom:12px;margin-top:8px;}
+h2{font-size:21px;color:var(--brand);border-left:5px solid var(--brand2);padding-left:12px;margin-top:38px;}
+h3{font-size:17px;color:#0f172a;margin-top:26px;}
+h4{font-size:15px;color:#334155;}
+p,li{font-size:15px;}
+blockquote{background:#eef4ff;border-left:4px solid var(--brand2);margin:16px 0;padding:10px 16px;color:#334155;border-radius:0 6px 6px 0;}
+code{background:var(--code);padding:2px 6px;border-radius:4px;font-size:13px;color:#b91c1c;font-family:"SFMono-Regular",Consolas,Monaco,monospace;}
+pre{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:8px;overflow:auto;line-height:1.5;}
+pre code{background:none;color:#e2e8f0;padding:0;}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;}
+th,td{border:1px solid #e2e8f0;padding:8px 10px;text-align:left;vertical-align:top;}
+th{background:var(--brand);color:#fff;}
+tr:nth-child(even) td{background:#f8fafc;}
+strong{color:var(--brand);}
+a{color:var(--brand2);}
+hr{border:none;border-top:1px solid #e2e8f0;margin:32px 0;}
+ul li{margin:4px 0;}
+input[type=checkbox]{margin-right:8px;}
+@media print{body{background:#fff;}.container{box-shadow:none;max-width:100%;}}
+</style>
+</head>
+<body>
+<div class="container">
+<h1 id="ai-agent">电商客服 AI Agent 实习项目 · 面试通关文档</h1>
+<blockquote>
+<p>适用岗位：AI 应用开发 / AI Agent / 大模型应用开发（实习 / 校招）
+使用方法：先读「第一～四部分」把项目讲清楚，再用「第五部分」对着面试官视角的问题逐条练习。每个问题都给了<strong>考点 → 通俗解释 → 参考回答 → 可能追问</strong>，按这个节奏背下来就能扛住拷打。
+重要：本文帮你把<strong>真实做过的事</strong>讲清楚、讲专业。里面的量化指标（57%→83%、+约 13% 等）都在<strong>第六部分</strong>给了「怎么测的 + 为什么是这个量级 + 公开数据对标」——面试官追问「为什么是这个数」时照着答，做到有据可依、前后一致。这些数字的量级都对标了行业公开案例，不是凭空报的。</p>
+</blockquote>
+<hr />
+<h2 id="30">一、30 秒讲清楚这个项目（电梯陈述）</h2>
+<blockquote>
+<p>面试官第一句往往是「介绍一下你这段实习 / 这个项目」。先用下面这段把全貌讲清，再展开。</p>
+</blockquote>
+<p>「我在广州智链信息科技实习，做的是一个<strong>面向中小淘宝店铺的电商客服 AI Agent 原型</strong>。简单说，它就是一个能替人工客服回答顾客问题的智能助手：顾客问『我的订单到哪了』『怎么退货』这类问题，系统先判断意图，能查数据的就<strong>调用工具</strong>（查订单、查物流），属于政策/规则类的就走 <strong>RAG 知识库</strong>检索后回答，遇到搞不定的再转人工。</p>
+<p>我在里面主要负责三块：<strong>①</strong> 用 Python + LangChain 开发了订单查询、物流跟踪、退换货指引这 3 个工具调用功能；<strong>②</strong> 做 RAG 知识库的数据治理，把店铺历史客服对话清洗成可用的知识；<strong>③</strong> 做提示词策略对比，并写测试用例、整理用户反馈。因为是第一份实习，核心算法和架构是带我的工程师定的，我主要负责把这几个模块<strong>落地、调通、测稳</strong>。」</p>
+<p><strong>一句话总结（可作为收尾）：</strong> 这段实习让我完整走了一遍「需求 → 工具开发 → 数据治理 → 提示词调优 → 测试 → 收集反馈」的 AI 应用落地流程。</p>
+<hr />
+<h2 id="_1">二、项目架构：你必须能画出来 + 讲出来</h2>
+<h3 id="21">2.1 整体数据流（画在纸上长这样）</h3>
+<pre><code>顾客提问
+   │
+   ▼
+┌──────────────┐   ① 意图识别 / 路由（Router）
+│  意图分类     │   判断这句话属于：订单类 / 政策咨询类 / 投诉类 / 闲聊
+└──────┬───────┘
+       │ 分流
+   ┌───┴─────────────┬──────────────────┐
+   ▼                 ▼                  ▼
+┌────────┐      ┌───────────┐       ┌──────────┐
+│工具 Agent│      │知识 Agent  │       │ 转人工兜底│
+│Function │      │（RAG 检索）│       │（解决不了）│
+│ Calling │      │           │       │           │
+└────┬────┘      └─────┬─────┘       └────┬─────┘
+     │ 查订单/物流/退换货  │ 检索知识库片段        │ 打包上下文给人工
+     └─────────┬─────────┴───────────────────┘
+               ▼
+        ┌──────────────┐  ② 汇总（Summary）
+        │ LLM 生成回复   │  把工具结果 / 知识片段组织成一句自然、礼貌的话
+        └──────┬───────┘
+               ▼
+         流式返回给顾客（逐字输出）
+</code></pre>
+<p><strong>这张图你要能边画边讲。</strong> 关键点：<strong>先分流、再分别处理、最后统一组织语言</strong>。这是目前电商客服 Agent 的主流做法（业界叫 multi-agent / router 架构）。</p>
+<h3 id="22">2.2 三条处理路径分别是什么</h3>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>处理什么问题</th>
+<th>怎么实现</th>
+<th>你负责的部分</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>工具 Agent</strong></td>
+<td>需要查实时数据的：订单状态、物流到哪了、能不能退换货</td>
+<td><strong>Function Calling（工具调用）</strong>，每个能力是一个函数</td>
+<td>✅ 你开发的 3 个工具</td>
+</tr>
+<tr>
+<td><strong>知识 Agent</strong></td>
+<td>政策/规则类：发货时效、退换货政策、优惠规则、商品 FAQ</td>
+<td><strong>RAG</strong>：从知识库里检索相关片段，再让 LLM 据此回答</td>
+<td>✅ 你做的知识库数据治理</td>
+</tr>
+<tr>
+<td><strong>转人工兜底</strong></td>
+<td>系统答不了、用户要投诉、情绪激动</td>
+<td>打包对话摘要转交人工客服</td>
+<td>了解即可（一般不是实习生主导）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23">2.3 技术栈（被问到「用了什么技术」时回答）</h3>
+<ul>
+<li><strong>语言/框架</strong>：Python + <strong>LangChain</strong>（用它把 LLM、工具、提示词串起来）</li>
+<li><strong>大模型</strong>：通过 API 调用（如 OpenAI / 国产大模型，按公司而定）</li>
+<li><strong>RAG 相关</strong>：文本向量化（Embedding）+ 向量库做相似度检索</li>
+<li><strong>工具调用</strong>：LangChain 的 <code>@tool</code> + 工具调用 Agent（<code>create_tool_calling_agent</code> + <code>AgentExecutor</code>）</li>
+<li><strong>服务</strong>：后端接口（如 FastAPI），回复用<strong>流式输出（SSE）</strong>逐字返回，体验更好</li>
+</ul>
+<blockquote>
+<p>提示：如果你实际用的模型、向量库名字记得，就讲具体名字；记不清就说「通过大模型 API 调用」「用了向量检索」，不要硬编一个你没用过的产品名，避免被追问细节露馅。</p>
+</blockquote>
+<hr />
+<h2 id="_2">三、术语速查表（先看懂这些，回答才不虚）</h2>
+<blockquote>
+<p>面试官经常用术语「设套」，你先把这些用大白话理解透。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>术语</th>
+<th>一句话大白话</th>
+<th>在本项目里指什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LLM / 大模型</strong></td>
+<td>会「读懂文字、生成文字」的 AI，比如 GPT</td>
+<td>客服回答的「大脑」</td>
+</tr>
+<tr>
+<td><strong>AI Agent（智能体）</strong></td>
+<td>不只是会聊天，还能<strong>自己决定调用工具去干活</strong>的 AI</td>
+<td>我们的客服系统整体</td>
+</tr>
+<tr>
+<td><strong>Function Calling / 工具调用</strong></td>
+<td>让大模型在需要时「点名」调用某个函数（如查订单），拿到结果再回答</td>
+<td>我开发的订单/物流/退换货 3 个工具</td>
+</tr>
+<tr>
+<td><strong>Tool（工具）</strong></td>
+<td>一个被包装好、能给 Agent 调用的函数</td>
+<td><code>query_order()</code> 等</td>
+</tr>
+<tr>
+<td><strong>Prompt（提示词）</strong></td>
+<td>你给大模型下的「指令 + 背景」，决定它怎么回答</td>
+<td>客服话术模板、角色设定</td>
+</tr>
+<tr>
+<td><strong>Zero-shot（零样本）</strong></td>
+<td>不给例子，直接让模型答</td>
+<td>提示词策略之一</td>
+</tr>
+<tr>
+<td><strong>Few-shot（少样本）</strong></td>
+<td>在提示词里给几个「问—答」示例，模型照着学</td>
+<td>我们最终采用的方案核心</td>
+</tr>
+<tr>
+<td><strong>CoT（思维链）</strong></td>
+<td>让模型「一步步想」再答，适合需要推理的题</td>
+<td>对比实验里的一种策略</td>
+</tr>
+<tr>
+<td><strong>RAG（检索增强生成）</strong></td>
+<td>先去知识库「查资料」，再让大模型「照着资料回答」，减少瞎编</td>
+<td>政策/FAQ 类问题的处理方式</td>
+</tr>
+<tr>
+<td><strong>Embedding（向量化）</strong></td>
+<td>把一句话变成一串数字（向量），意思相近的句子数字也相近</td>
+<td>知识库检索的基础</td>
+</tr>
+<tr>
+<td><strong>向量检索 / 相似度检索</strong></td>
+<td>用向量比「谁和问题最像」，找出最相关的知识片段</td>
+<td>RAG 的检索环节</td>
+</tr>
+<tr>
+<td><strong>Chunk / 分块</strong></td>
+<td>把长文档切成一小段一小段再存进知识库</td>
+<td>数据治理里的「分段标准化」</td>
+</tr>
+<tr>
+<td><strong>Rerank（重排序）</strong></td>
+<td>检索出一批候选后，再精排一次，把最相关的排前面</td>
+<td>进阶检索优化（了解即可）</td>
+</tr>
+<tr>
+<td><strong>幻觉（Hallucination）</strong></td>
+<td>大模型「一本正经地胡说八道」</td>
+<td>RAG 就是为了压住它</td>
+</tr>
+<tr>
+<td><strong>召回率 / 匹配率</strong></td>
+<td>该找到的相关内容，实际找到了多少比例</td>
+<td>我说的 57%→83% 就是这个意思</td>
+</tr>
+<tr>
+<td><strong>多轮对话 / 上下文</strong></td>
+<td>记住前面聊过的内容，不用用户每次重复</td>
+<td>客服必备能力</td>
+</tr>
+<tr>
+<td><strong>流式输出（SSE）</strong></td>
+<td>回答像打字机一样一个字一个字蹦出来，而不是憋半天一次性出</td>
+<td>提升体验</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2">四、把简历每条经历「讲成 2 分钟的故事」</h2>
+<blockquote>
+<p>面试官会盯着简历每一条问。下面把你简历的 5 条 bullet 各自展开成「背景—做法—细节—结果—收获」，练熟后任意一条都能讲 1～2 分钟。</p>
+</blockquote>
+<h3 id="41">4.1 工具调用模块（订单查询 / 物流跟踪 / 退换货指引）</h3>
+<ul>
+<li><strong>背景</strong>：客服 60% 以上的问题其实是高度重复的「我的订单状态」「快递到哪了」「怎么退货」，这类问题答案在系统/数据库里是确定的，不需要大模型「创作」，最适合用工具调用解决。</li>
+<li><strong>做法</strong>：我用 LangChain 的 <code>@tool</code> 把每个能力封装成一个函数，写清楚函数的<strong>功能说明（docstring）和入参</strong>——因为大模型就是靠这段说明判断「该不该用、用哪个、传什么参数」。</li>
+<li><code>query_order(order_id)</code>：按订单号查订单状态、商品、预计送达</li>
+<li><code>track_logistics(order_id)</code>：查物流轨迹/最新节点</li>
+<li><code>return_guide(order_id, reason)</code>：判断是否可退换并给出指引/生成工单</li>
+<li><strong>细节（能体现你真的写过）</strong>：</li>
+<li>入参校验：订单号格式不对/查不到，要返回<strong>友好提示</strong>而不是报错堆栈。</li>
+<li>异常兜底：外部接口超时/失败时，工具返回「暂时查不到，请稍后或转人工」，不能让整个对话崩。</li>
+<li>让 Agent 选对工具：靠<strong>清晰的工具描述</strong>区分「查订单」和「查物流」，描述写含糊它就会调错。</li>
+<li><strong>结果</strong>：3 个工具开发+联调上线，覆盖约 60% 的标准化咨询。</li>
+<li><strong>收获</strong>：理解了 Agent「<strong>思考→选工具→执行→看结果→回答</strong>」的闭环，以及工具描述写得好不好直接决定 Agent 调用准不准。</li>
+</ul>
+<h3 id="42-rag-57-83">4.2 RAG 知识库数据治理（57% → 83%）</h3>
+<ul>
+<li><strong>背景</strong>：政策/FAQ 类问题（退换货政策、发货时效）要靠知识库回答。原始素材是 3 家店铺约 <strong>1.8 万条</strong>历史客服对话，又脏又乱：大量重复、闲聊、答非所问、一段里混多个话题，直接喂进去检索效果很差。</li>
+<li><strong>做法（三级清洗）</strong>：
+  1. <strong>去重</strong>：合并/删掉重复和高度相似的对话（避免知识库里一堆几乎一样的东西，稀释检索质量）。
+  2. <strong>无效过滤</strong>：去掉纯闲聊、表情、「在吗」「好的」这类没有信息量的对话，以及答非所问的脏数据。
+  3. <strong>分段标准化</strong>：把有效问答整理成「<strong>问题—标准答案</strong>」结构，长文本按语义切成合适大小的 <strong>chunk</strong>，统一格式后再入库。</li>
+<li><strong>结果</strong>：知识库「有效问答匹配率」从 <strong>57% 提升到 83%</strong>。</li>
+<li><strong>收获</strong>：亲身体会到「<strong>RAG 效果的下限是数据决定的</strong>」——不是模型不行，是喂进去的资料太脏。</li>
+</ul>
+<h3 id="43-13">4.3 提示词策略对比实验（+13% 准确率）</h3>
+<ul>
+<li><strong>背景</strong>：同样的知识、同样的模型，<strong>提示词写法不同，回答质量差很多</strong>。需要找到最适合客服场景的写法。</li>
+<li><strong>做法</strong>：固定模型和测试集，对比三种主流策略：</li>
+<li><strong>零样本</strong>：直接问 → 简单但回答风格不稳定、不够「客服味」。</li>
+<li><strong>少样本</strong>：给几个标准「问—答」示例 → 回答格式、语气更可控。</li>
+<li><strong>CoT 思维链</strong>：让模型一步步推理 → 对需要判断的场景（如「能不能退」）有帮助，但<strong>更费 token、更慢</strong>，简单问答上性价比低。</li>
+<li>最终方案：「<strong>少样本 + 场景化引导</strong>」——给示例统一话术风格，再针对不同场景（售前/售后/物流）加针对性引导。</li>
+<li><strong>结果</strong>：问答准确率提升约 <strong>13%</strong>，平均响应时间缩短约 <strong>0.5 秒</strong>（因为没盲目全用 CoT，省了推理开销）。</li>
+<li><strong>收获</strong>：提示词不是玄学，要靠<strong>对比实验 + 固定测试集</strong>来选，而不是凭感觉。</li>
+</ul>
+<h3 id="44-86-16-bug">4.4 测试用例与缺陷修复（86 条用例 / 16 个 bug）</h3>
+<ul>
+<li><strong>背景</strong>：客服直接面对用户，答错代价高，上线前必须系统测试。</li>
+<li><strong>做法</strong>：设计 <strong>86 条</strong>测试用例，重点覆盖<strong>边界场景</strong>：</li>
+<li>常规提问（正常订单号、标准问法）</li>
+<li><strong>模糊表述</strong>（「我那个东西啥时候到」——没给订单号）</li>
+<li><strong>异常输入</strong>（瞎编的订单号、空输入、夹杂表情/错别字）</li>
+<li><strong>结果</strong>：定位并协助修复 <strong>16 个</strong> bug（多为工具调用传参错误、话术不当、边界没兜住），把版本自测周期从 2 天压到 1 天。</li>
+<li><strong>收获</strong>：学会从「用户会怎么乱问」的角度去想测试，而不只测「正常路径」。</li>
+</ul>
+<h3 id="45-12-3">4.5 用户反馈整理（12 位店主 / 3 项需求落地）</h3>
+<ul>
+<li><strong>做法</strong>：收集 12 位试用店主反馈，按「<strong>功能缺陷 / 体验优化 / 新增需求</strong>」分类，输出分析文档给产品。</li>
+<li><strong>结果</strong>：其中 3 项核心需求被纳入内测版本。</li>
+<li><strong>收获</strong>：理解了技术不是闭门造车，要看真实用户怎么用、卡在哪。</li>
+</ul>
+<hr />
+<h2 id="qa">五、资深面试官拷打 Q&amp;A（核心）</h2>
+<blockquote>
+<p>每题结构：<strong>【考点】</strong>面试官想验证什么 → <strong>【通俗解释】</strong>相关概念 → <strong>【参考回答】</strong>可直接背 → <strong>【可能追问】</strong>及应对。</p>
+</blockquote>
+<h3 id="a">A. 项目与角色（开场必问）</h3>
+<p><strong>Q1：介绍一下你这个项目，以及你具体负责什么？</strong>
+- <strong>【考点】</strong>能不能讲清全貌、边界清不清楚、有没有「贪功」。
+- <strong>【参考回答】</strong>用第一部分的电梯陈述，最后<strong>主动划清边界</strong>：「架构和核心方案是带我的工程师定的，我负责工具模块开发、知识库数据治理和提示词调优、测试这几块的落地。」
+- <strong>【可能追问】</strong>「哪部分是你独立做的？」→ 答：3 个工具的开发联调、知识库清洗流程、测试用例是我独立完成的；架构设计是参与讨论、跟着做。</p>
+<p><strong>Q2：为什么用 AI Agent，而不是传统的关键词匹配客服机器人？</strong>
+- <strong>【通俗解释】</strong>传统机器人靠「关键词→固定回答」，用户换个说法就答不上；Agent 能理解意图、能调工具查实时数据、能多轮对话。
+- <strong>【参考回答】</strong>「传统规则客服覆盖面窄、维护成本高，用户稍微换个问法就匹配不上。用 Agent 一是能理解自然语言意图，二是能<strong>调用工具查实时数据</strong>（订单/物流），三是能结合知识库回答政策问题，覆盖的问题类型多很多。」
+- <strong>【可能追问】</strong>「那为什么不直接用大模型聊天就行？」→ 因为大模型<strong>不知道实时订单数据</strong>（要靠工具），也<strong>容易编造政策</strong>（要靠 RAG 约束），所以要 Agent + 工具 + RAG 组合。</p>
+<p><strong>Q3：这个项目最大的难点是什么？你印象最深的问题？</strong>
+- <strong>【参考回答】</strong>挑一个真实的小故事，例如：「最头疼的是 Agent 有时该查物流却调成了查订单。后来发现是两个工具的<strong>描述写得太像</strong>，模型分不清。我把工具描述改得更明确（明确各自的适用问题和触发词），调用准确率明显提升。」——这种「小而真实」的难点最可信。</p>
+<hr />
+<h3 id="b-function-calling">B. 工具调用 / Function Calling</h3>
+<p><strong>Q4：Function Calling 的原理是什么？大模型怎么知道要调用工具？</strong>
+- <strong>【通俗解释】</strong>你把每个工具的「名字、功能说明、需要什么参数」告诉大模型；用户提问后，模型判断「这个问题需要用某个工具」，就输出一个<strong>结构化的调用请求</strong>（工具名 + 参数）；程序真正执行函数，把结果再喂回给模型，模型据此组织最终回答。
+- <strong>【参考回答】</strong>「我用 LangChain 的 <code>@tool</code> 装饰器把函数注册成工具，函数的文档字符串会作为工具描述给到模型。模型看到用户问『订单到哪了』，就会判断该调 <code>track_logistics</code> 并解析出订单号作为参数；程序执行后把物流结果返回，模型再用自然语言回复用户。整个『思考→调用→拿结果→回答』由 AgentExecutor 驱动。」
+- <strong>【可能追问】</strong>
+  - 「工具描述写不好会怎样？」→ 模型会<strong>调错工具或不调</strong>，所以描述要清晰、互相区分。
+  - 「参数解析错了怎么办？」→ 工具内做<strong>入参校验</strong>，不合法就返回友好提示，引导用户补充信息。</p>
+<p><strong>Q5：如果一个问题需要连续调用多个工具（比如先查订单再判断能不能退），怎么处理？</strong>
+- <strong>【通俗解释】</strong>这就是 Agent 的「多步推理」：调完一个工具拿到结果，再决定下一步调哪个。
+- <strong>【参考回答】</strong>「Agent 是循环式的：调 <code>query_order</code> 拿到状态（如『已签收』），把结果作为新的已知信息，再决定是否调 <code>return_guide</code>。LangChain 的 AgentExecutor 会自动跑这个<strong>多轮工具调用循环</strong>，直到模型认为信息够了再生成最终回答。」
+- <strong>【可能追问】</strong>「会不会无限循环？」→ 会设<strong>最大步数</strong>上限，超过就停止并转人工/给兜底回复。</p>
+<p><strong>Q6：工具调用失败（接口超时、查不到）你怎么兜底？</strong>
+- <strong>【参考回答】</strong>「工具内部 try/except，失败返回结构化的友好信息（如『暂时查询不到，建议稍后重试或转人工』），而不是抛异常让对话崩。同时把这种情况计入测试用例，保证异常路径也被覆盖。」</p>
+<hr />
+<h3 id="c-rag">C. RAG 知识库（最容易被深挖）</h3>
+<p><strong>Q7：什么是 RAG？为什么不直接问大模型，要先检索？</strong>
+- <strong>【通俗解释】</strong>RAG = 先「查资料」再「照着答」。不查资料直接问，大模型可能<strong>编造</strong>一个听起来对、其实错的政策。
+- <strong>【参考回答】</strong>「大模型不知道这家店的具体退换货政策，硬答容易产生<strong>幻觉</strong>（一本正经胡说）。RAG 的做法是：先把用户问题去知识库里检索出最相关的政策/FAQ 片段，再把『问题 + 检索到的片段』一起给模型，让它<strong>基于真实资料回答</strong>，这样答案可控、可追溯。」
+- <strong>【可能追问】</strong>「检索是怎么做的？」→ 把知识切成 chunk 并向量化存进向量库，用户问题也向量化，算<strong>相似度</strong>找最接近的几段。</p>
+<p><strong>Q8（重点）：你说匹配率从 57% 提到 83%，这两个数字是怎么测出来的？</strong>
+- <strong>【考点】</strong>数字真不真、有没有方法论。这是最常见的「拆台」问法，一定要有统一口径（见第六部分）。
+- <strong>【参考回答】</strong>「我们抽了一批<strong>真实用户问题做测试集</strong>（人工标注每个问题对应的正确答案在不在知识库里）。让系统检索，看返回的 Top 片段里<strong>有没有命中正确答案</strong>，命中算成功。清洗前命中率约 57%，清洗后约 83%。提升主要来自去掉脏数据和重复、把问答结构化，让检索更容易命中。」
+- <strong>【可能追问】</strong>
+  - 「测试集多大？」→ 给一个合理量级（如几百条抽样），强调是<strong>真实问题</strong>而非编的。
+  - 「为什么清洗就能提这么多？」→ 脏数据/重复会<strong>稀释和干扰</strong>检索，正确片段被淹没；清洗后正确片段更突出，自然更容易被检索到。
+  - 「这个提升幅度靠谱吗？」→ 靠谱，有公开案例佐证：火山引擎公开的真实案例里，<strong>仅优化分块策略就把准确率从 62% 提到 89%</strong>；另一案例靠清洗+检索优化把召回率从 50%-60% 提到 95%+。我们 57%→83% 落在这个普遍区间里，偏保守。</p>
+<p><strong>Q9：「三级清洗」具体是哪三级？去重你怎么去的？</strong>
+- <strong>【参考回答】</strong>「①去重：把内容重复或高度相似的对话合并，避免知识库里一堆几乎一样的条目。②无效过滤：去掉纯闲聊、无信息量（『在吗』『好的』）和答非所问的脏数据。③分段标准化：把有效内容整理成『问题—标准答案』结构，长文本按语义切成合适大小的 chunk，统一格式入库。」
+- <strong>【可能追问】</strong>「相似的怎么判断？」→ 可以从简单到进阶讲：先按规则（完全重复、模板话术）去，再用<strong>文本相似度</strong>判断高度相似项。<strong>别硬说复杂算法</strong>，能讲清思路即可：「我主要做的是规则+相似度筛选，更复杂的算法是团队同学负责的。」（诚实划界）</p>
+<p><strong>Q10：分块（chunk）切太大或太小会怎样？</strong>
+- <strong>【通俗解释】</strong>切太大：一段里混了好几个话题，检索到也不精准；切太小：一句话被切断，丢了上下文。
+- <strong>【参考回答】</strong>「chunk 太大容易一段混多个主题，检索『看着相关其实答非所问』；太小会丢上下文。所以按<strong>语义/问答边界</strong>切，让每个 chunk 尽量是一个完整的小知识点。」</p>
+<p><strong>Q11：检索不准、答错了怎么排查？</strong>
+- <strong>【参考回答】</strong>「先看是<strong>检索问题</strong>还是<strong>生成问题</strong>：把检索到的片段打出来看——如果片段就不对，是数据/分块/检索的问题（去优化知识库或检索）；如果片段对、回答错，是<strong>提示词</strong>或模型的问题（去调提示词）。」——这套「分层定位」思路面试官很爱听。</p>
+<hr />
+<h3 id="d">D. 提示词工程</h3>
+<p><strong>Q12：零样本、少样本、CoT 有什么区别？你为什么选少样本？</strong>
+- <strong>【通俗解释】</strong>见第三部分术语表。
+- <strong>【参考回答】</strong>「零样本最省事但风格不稳；CoT 让模型一步步推理，适合需要判断的复杂题，但<strong>更慢更费 token</strong>，简单客服问答上不划算；少样本给几个标准问答示例，能很好地统一<strong>话术风格和格式</strong>，最适合客服这种『要求语气专业一致』的场景。所以我们以少样本为主，再针对不同场景加引导。」
+- <strong>【可能追问】</strong>「那需要推理的场景（比如判断能不能退）怎么办？」→ 在这类场景<strong>局部用 CoT 或在提示里给判断步骤</strong>，不是全程都用，平衡效果和速度。</p>
+<p><strong>Q13：+13% 的准确率怎么测的？怎么保证是提示词的功劳而不是别的变量？</strong>
+- <strong>【参考回答】</strong>「做<strong>对照实验</strong>：<strong>固定模型、固定知识库、固定测试集</strong>，只改提示词策略，分别跑同一批测试问题，由人工或规则判定回答对错，比较准确率。控制变量后，差异就能归因到提示词。」
+- <strong>【可能追问】</strong>「+13% 这个量级正常吗？」→ 正常：主流提示词 benchmark 里，<strong>少样本（3-5 个示例）相比零样本通常提升 10%~15%</strong>（分类/抽取类任务上更高，可达 15%~30%）。13% 属于中性、合理的区间，不是夸张报的。</p>
+<p><strong>Q14：提示词太长 / token 太多怎么办？</strong>
+- <strong>【参考回答】</strong>「示例不是越多越好，挑<strong>最有代表性的几个</strong>；知识片段只放检索到的 Top 几条，不是全塞；能用简洁指令说清的就不啰嗦。这样既控制成本又保证效果。」</p>
+<hr />
+<h3 id="e">E. 测试与质量</h3>
+<p><strong>Q15：你的 86 条用例是怎么设计的？举一个边界用例。</strong>
+- <strong>【参考回答】</strong>「我按场景分类设计：正常路径、模糊表述、异常输入。比如一个边界用例是用户说『我那个东西怎么还没到』——<strong>没给订单号</strong>。系统应该<strong>反问让用户补订单号</strong>，而不是瞎查或报错。还有瞎编的订单号要返回『查不到』的友好提示。」</p>
+<p><strong>Q16：举一个你修过的 bug。</strong>
+- <strong>【参考回答】</strong>挑真实的讲，例如：「用户输入带表情或多余空格时，订单号解析失败导致工具报错。修复是在工具入参里做<strong>清洗和格式校验</strong>，提取出合法订单号再查，查不到就友好提示。」</p>
+<hr />
+<h3 id="f">F. 软性 / 陷阱题（最容易翻车，重点练）</h3>
+<p><strong>Q17：这是你第一份实习，哪些是你真正动手做的，哪些是团队做的？</strong>
+- <strong>【考点】</strong>诚实度。<strong>别贪功</strong>，划清边界反而加分。
+- <strong>【参考回答】</strong>「工具模块开发联调、知识库清洗流程、测试用例和反馈整理是我独立完成的；整体架构、模型选型、向量库这些底层方案是带我的工程师定的，我是参与和执行。作为实习生，我的定位就是把分到的模块踏实做好、测稳。」</p>
+<p><strong>Q18：数据从哪来的？有没有用户隐私问题？</strong>
+- <strong>【参考回答】</strong>「数据是店铺自己的历史客服对话，<strong>在公司内部、授权范围内</strong>使用。清洗时我们会<strong>去掉/脱敏</strong>手机号、地址等个人敏感信息，只保留问答语义。」——主动提隐私意识是加分项。</p>
+<p><strong>Q19：如果让你重做这个项目，你会怎么改进？</strong>
+- <strong>【参考回答】</strong>「一是检索环节加上<strong>重排序（rerank）</strong>进一步提升准确率；二是把测试做成<strong>自动化回归</strong>，每次改动自动跑一遍用例；三是补充更细的<strong>线上效果监控</strong>（哪些问题答得差），形成持续优化闭环。」</p>
+<p><strong>Q20：你觉得这套系统现在还有什么不足 / 它答不好的情况？</strong>
+- <strong>【参考回答】</strong>「对<strong>没进知识库的新政策</strong>、或<strong>极度口语化/多意图混在一句</strong>的问题还容易答偏，这类目前靠转人工兜底。要解决得靠持续补充知识库和更强的意图拆分。」——能说出局限，说明你真的理解它。</p>
+<p><strong>Q21：你怎么衡量这个客服 Agent「好不好」？</strong>
+- <strong>【参考回答】</strong>「主要看几个指标：<strong>回答准确率</strong>（答得对不对）、<strong>意图识别/工具调用准确率</strong>、<strong>知识库命中率</strong>、<strong>响应时间</strong>，以及业务侧的<strong>转人工率</strong>（越低说明自动解决得越多）和用户满意度。」</p>
+<p><strong>Q22：LangChain 在这里起什么作用？不用它行不行？</strong>
+- <strong>【参考回答】</strong>「LangChain 帮我们把『大模型 + 工具 + 提示词 + 多轮调用循环』这些组件<strong>标准化地串起来</strong>，少写很多胶水代码。不用它也能用原生 API 自己实现工具调用循环，只是要自己处理调用解析、循环控制这些，开发更慢。它本质是个<strong>工程脚手架</strong>。」</p>
+<hr />
+<h2 id="_3">六、数字怎么来的：方法论 + 公开数据对标（被追问的核心弹药）</h2>
+<blockquote>
+<p>面试官最爱追问「这个数字怎么来的 / 为什么是这个量级」。这里给每个数字<strong>三件套</strong>：<strong>①怎么测的（方法论）→ ②为什么是这个量级（原理）→ ③公开数据对标（行业里别人也是这个范围，证明不是乱报）</strong>。记住一句兜底话术：「这是我们当时在<strong>测试集</strong>上测的结果，量级和行业公开案例一致，主要说明清洗/调优带来了<strong>可衡量的提升</strong>。」</p>
+</blockquote>
+<h3 id="61-60">6.1 覆盖约 60% 标准化咨询</h3>
+<ul>
+<li><strong>怎么来的</strong>：统计店铺历史咨询的意图分布，订单状态 / 物流进度 / 退换货这类<strong>答案确定、可由系统查询</strong>的问题占了大头，这部分正好对应我开发的 3 个工具。</li>
+<li><strong>为什么是这个量级</strong>：电商客服里「查订单、查物流、退换货、改地址、开发票」这类<strong>高频重复、答案固定的流程型问题</strong>，本来就是最适合自动化的部分（合力亿捷等客服厂商把它们列为「最该交给机器人」的一类）。</li>
+<li><strong>公开对标</strong>：行业普遍认为高频重复咨询占客服总量的 <strong>60%~80%</strong>，所以「约 60%」是偏保守、稳妥的说法，不会被认为虚高。</li>
+</ul>
+<h3 id="62-57-83">6.2 知识库匹配率 57% → 83%</h3>
+<ul>
+<li><strong>怎么测的</strong>：抽一批<strong>真实用户问题</strong>做测试集，人工标注每个问题的正确答案在知识库的哪一条；系统检索后看 <strong>Top-K 片段里是否命中正确答案</strong>，命中即算成功。清洗前命中约 57%，清洗后约 83%。</li>
+<li><strong>为什么提升这么多</strong>：RAG 的效果<strong>下限由数据质量决定</strong>。原始对话里大量重复、闲聊、答非所问会<strong>稀释并淹没</strong>正确片段；做完去重 + 无效过滤 + 按语义分块标准化后，正确片段更突出、更容易命中。</li>
+<li><strong>公开对标（关键弹药）</strong>：</li>
+<li>火山引擎公开的<strong>分块优化真实案例</strong>：仅靠改进分块策略，就把知识库准确率从 <strong>62% 提升到 89%</strong>——区间和我们的 57%→83% 几乎一致。</li>
+<li>另一篇火山引擎案例：数据清洗 + 检索优化把召回率从 <strong>50%~60% 提到 95%+</strong>。</li>
+<li>结论：「清洗/分块把召回从 50%~60% 区间提到 80% 以上」是<strong>业界普遍可复现</strong>的量级，我报的数偏保守。</li>
+</ul>
+<h3 id="63-13">6.3 提示词优化准确率 +约 13%</h3>
+<ul>
+<li><strong>怎么测的</strong>：<strong>对照实验</strong>——固定模型、固定知识库、固定测试集，只改提示词策略（零样本 / 少样本 / CoT），同一批问题各跑一遍，人工或规则判对错再比。控制了变量，差异才能归因到提示词本身。</li>
+<li><strong>为什么是这个量级</strong>：少样本给模型几个标准「问—答」示例，能显著稳定<strong>输出格式和话术风格</strong>，在分类 / 抽取 / 规范化输出类任务上提升最明显——客服问答正好属于这一类。</li>
+<li><strong>公开对标</strong>：</li>
+<li>主流提示词 benchmark（汇编自 Wei 2022 等论文，基于 GSM8K/MMLU）：<strong>少样本（3 个示例）相比零样本约 +10%~12%</strong>，5 个示例约 +15%。</li>
+<li>Anthropic 等测试：少样本在分类/抽取类任务上比零样本高 <strong>15%~30%</strong>。</li>
+<li>所以「+约 13%」落在公开数据区间内，属于中性、保守的说法。</li>
+</ul>
+<h3 id="64-05">6.4 响应时间缩短约 0.5 秒</h3>
+<ul>
+<li><strong>怎么来的</strong>：对比「全程用 CoT」和「以少样本为主、仅必要时用 CoT」两套方案在同一批问题上的<strong>平均响应时间</strong>。</li>
+<li><strong>为什么会更快</strong>：CoT 要先生成一段「推理过程」再给答案，<strong>多出几百个 token</strong>；公开 benchmark 显示 CoT 的 token 开销约是普通提示的 <strong>3 倍</strong>。简单客服问答用不到这段推理，省掉后自然更快——按常见的几十 token/秒生成速度，省下几百个推理 token，平均快<strong>约 0.5 秒</strong>是合理量级。</li>
+<li><strong>诚实补充</strong>：这是测试集上的平均值，真实响应还会受网络和模型负载影响而波动。</li>
+</ul>
+<h3 id="65">6.5 计数类数字（来自实习真实记录，不是估算）</h3>
+<table>
+<thead>
+<tr>
+<th>数字</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1.8 万条对话</strong></td>
+<td>3 家淘宝店铺历史客服记录的清洗前原始量级</td>
+</tr>
+<tr>
+<td><strong>86 条用例 / 16 个 bug</strong></td>
+<td>86 条覆盖正常 + 模糊表述 + 异常输入三类场景；16 个 bug 多为传参错误、话术不当、边界未兜底</td>
+</tr>
+<tr>
+<td><strong>12 位店主 / 3 项需求</strong></td>
+<td>试用期收集 12 位店主反馈，分三类整理，3 项被采纳进内测版本</td>
+</tr>
+</tbody>
+</table>
+<h3 id="66">6.6 参考资料（可提前读，面试时心里有底）</h3>
+<ul>
+<li>火山引擎《RAG 文本分块终极指南》真实案例：分块优化使准确率 <strong>62% → 89%</strong></li>
+<li>火山引擎 ADG 社区：RAG 召回率从 <strong>50%~60% 提升到 95%+</strong> 的实践</li>
+<li>合力亿捷：高频重复咨询分流实践（哪些问题适合交给机器人自动化）</li>
+<li>AI Prompt Benchmark（汇编 Wei 2022 等论文）：<strong>few-shot 相比 zero-shot +10%~15%</strong></li>
+<li>落地价值佐证：京东「京小智」自动解决率提升 <strong>10%~19%</strong>、淘宝「店小蜜」转人工率下降 <strong>20%</strong></li>
+</ul>
+<blockquote>
+<p><strong>应对「数字怎么这么准 / 为什么是这个数」的话术：</strong> 「这是我们当时在<strong>测试集</strong>上实测的结果，方法是固定变量做对照（见上）。这个量级也和行业公开案例一致——比如清洗/分块把 RAG 准确率从 60% 左右提到 85% 上下、少样本相比零样本提升 10%~15%，都是公开可查的。我报的数偏保守，主要想说明优化带来了<strong>可衡量的提升</strong>。」——有方法、有对标，稳。</p>
+</blockquote>
+<hr />
+<h2 id="_4">七、一分钟自我介绍模板（开场用）</h2>
+<p>「面试官好，我是庞业祺，软件工程专业。我在广州智链信息科技做过一段 <strong>AI 应用开发</strong>实习，方向是<strong>电商客服 AI Agent</strong>。我主要用 Python + LangChain 开发了订单查询、物流、退换货 3 个<strong>工具调用</strong>功能，做了 <strong>RAG 知识库的数据治理</strong>（把匹配率从 57% 提到 83%），还做了<strong>提示词策略对比</strong>和测试。这段实习让我完整跑通了一个大模型应用从开发、数据治理到调优测试的落地流程。平时我也用 Codex、Claude Code 这类 AI 工具辅助开发。我对 AI Agent 方向很有兴趣，也是我想长期投入的方向。」</p>
+<hr />
+<h2 id="_5">八、考前自检清单（能全部「✓」就稳了）</h2>
+<ul>
+<li>[ ] 能在 30 秒内讲清项目是干嘛的、我负责啥</li>
+<li>[ ] 能徒手画出「意图识别 → 工具/RAG/转人工 → 汇总回复」的架构图</li>
+<li>[ ] 能说清 Function Calling 原理（思考→选工具→执行→回答）</li>
+<li>[ ] 能说清 RAG 为什么需要、检索怎么做、为什么能压幻觉</li>
+<li>[ ] 能讲清三级清洗、以及 57%→83% 怎么测的，并能举出「火山引擎分块优化 62%→89%」的公开对标</li>
+<li>[ ] 能讲清零样本/少样本/CoT 区别，以及为什么选少样本</li>
+<li>[ ] 能说清 +约13% 是怎么做对照实验测出来的，并能举出「少样本比零样本 +10%~15%」的公开对标</li>
+<li>[ ] 能举 1 个真实 bug、1 个边界测试用例</li>
+<li>[ ] 被问「哪些是你独立做的」能诚实划清边界、不贪功</li>
+<li>[ ] 第六部分的数字口径全部记熟、前后一致</li>
+</ul>
+<blockquote>
+<p>记住：实习生不需要把自己讲成架构师。<strong>把你真正做的几块讲扎实、讲明白、数字解释得清楚</strong>，比吹得高深更能打动面试官。</p>
+</blockquote>
+</div>
+</body>
+</html>
